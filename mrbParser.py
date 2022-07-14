@@ -138,7 +138,7 @@ class RiteIrepSection:
 		self.symbols = []
 		for i in range(self.symbolsLen):
 			symbolNameLength = read_uint16(file)
-			self.symbols.append(read_string(file, symbolNameLength + 1))
+			self.symbols.append(read_string(file, symbolNameLength + 1) if symbolNameLength != 0xffff else "")
 		
 		self.childIreps = []
 		for i in range(self.numChildIreps):

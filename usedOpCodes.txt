@@ -1,0 +1,82 @@
+OP_NOP: 		0
+OP_MOVE:        1528            global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_LOADL:       82              global_ac2e8923_scp.bin, p100_306867fd_scp.bin, p100_47a5d6eb_scp.bin, p100_6695192d_scp.bin, p100_73ce9cac_scp.bin
+OP_LOADI:       2216            global_5be16b92_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, p100_10a1b8c_scp.bin, p100_1a401b0f_scp.bin
+OP_LOADSYM:     16861           global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_LOADNIL:     1786            global_5be16b92_scp.bin, global_60efb803_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, p100_1a401b0f_scp.bin
+OP_LOADSELF:    23955           global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_LOADT:       379             global_5be16b92_scp.bin, global_ac2e8923_scp.bin, p100_306867fd_scp.bin, p100_47a5d6eb_scp.bin, p100_73ce9cac_scp.bin
+OP_LOADF:       19              global_5be16b92_scp.bin, global_ac2e8923_scp.bin, p200_d0a7f4dc_scp.bin, q440_3b4ef61d_scp.bin, r160_dc20cee5_scp.bin
+OP_GETGLOBAL:   96              global_5be16b92_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, q561_74b9a716_scp.bin, q770_59f68d25_scp.bin
+OP_SETGLOBAL:   6               global_5be16b92_scp.bin, global_ac2e8923_scp.bin
+OP_GETSPECIAL:  0
+OP_SETSPECIAL:  0
+OP_GETIV:       287             global_5be16b92_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, p100_7c4579da_scp.bin, p100_9b15340d_scp.bin
+OP_SETIV:       32              global_5be16b92_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, q550_688e8050_scp.bin, g11516_2ccba2ea_scp.bin
+OP_GETCV:       37              global_5be16b92_scp.bin, global_ac2e8923_scp.bin
+OP_SETCV:       5               global_5be16b92_scp.bin
+OP_GETCONST:    894             global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_SETCONST:    10300           global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, p100_10a1b8c_scp.bin
+OP_GETMCNST:    1               global_ac2e8923_scp.bin
+OP_SETMCNST:    0
+OP_GETUPVAR:    413             global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_SETUPVAR:    11              global_5be16b92_scp.bin, global_ac2e8923_scp.bin
+OP_JMP: 		2217            global_5be16b92_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, p100_1a401b0f_scp.bin, p100_23622eee_scp.bin
+OP_JMPIF:       1097            global_5be16b92_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, p100_1a401b0f_scp.bin, p100_23622eee_scp.bin
+OP_JMPNOT:      230             global_5be16b92_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, p100_306867fd_scp.bin, p200_c544d6ad_scp.bin
+OP_ONERR:       0
+OP_RESCUE:      0
+OP_POPERR:      0
+OP_RAISE:       0
+OP_EPUSH:       0
+OP_EPOP:        0
+OP_SEND:        26347           global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_SENDB:       491             global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_FSEND:       0
+OP_CALL:        0
+OP_SUPER:       4               global_5be16b92_scp.bin
+OP_ARGARY:      4               global_5be16b92_scp.bin
+OP_ENTER:       6672            global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_KARG:        0
+OP_KDICT:       0
+OP_RETURN:      7550            global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_TAILCALL:    0
+OP_BLKPUSH:     1               global_5be16b92_scp.bin
+OP_ADD: 		6               global_5be16b92_scp.bin, global_ac2e8923_scp.bin
+OP_ADDI:        6               p300_abb1d768_scp.bin, qab5_4a1ea1bc_scp.bin
+OP_SUB: 		4               global_ac2e8923_scp.bin
+OP_SUBI:        0
+OP_MUL: 		0
+OP_DIV: 		1               global_ac2e8923_scp.bin
+OP_EQ:  		202             global_5be16b92_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin, p200_7c0c6f18_scp.bin, p300_abb1d768_scp.bin
+OP_LT:  		19              global_5be16b92_scp.bin, global_ac2e8923_scp.bin, p100_f5aa4a11_scp.bin, q550_688e8050_scp.bin
+OP_LE:  		2               g11516_2ccba2ea_scp.bin
+OP_GT:  		105             global_ac2e8923_scp.bin, p300_e6cf440a_scp.bin, q020_404eba3d_scp.bin, q100_f4f7e973_scp.bin, q101_5be5b4cc_scp.bin
+OP_GE:  		11              global_ac2e8923_scp.bin, p300_abb1d768_scp.bin, q004_66cb980f_scp.bin, q004_1_b5ada587_scp.bin, q550_688e8050_scp.bin
+OP_ARRAY:       14472           global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_ARYCAT:      8               global_5be16b92_scp.bin, global_ac2e8923_scp.bin
+OP_ARYPUSH:     0
+OP_AREF:        2               global_5be16b92_scp.bin
+OP_ASET:        0
+OP_APOST:       0
+OP_STRING:      99409           global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_STRCAT:      24              global_5be16b92_scp.bin, global_ac2e8923_scp.bin, r110_dd7422a2_scp.bin
+OP_HASH:        1700            global_5be16b92_scp.bin, global_ac2e8923_scp.bin, p100_1a401b0f_scp.bin, p100_23622eee_scp.bin, p100_306867fd_scp.bin
+OP_LAMBDA:      7122            global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_RANGE:       0
+OP_OCLASS:      1               global_ac2e8923_scp.bin
+OP_CLASS:       12              global_5be16b92_scp.bin, global_ac2e8923_scp.bin
+OP_MODULE:      1               global_ac2e8923_scp.bin
+OP_EXEC:        388             global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_METHOD:      6631            global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_SCLASS:      377             global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_d595bcd1_scp.bin, p100_10a1b8c_scp.bin
+OP_TCLASS:      6632            global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_DEBUG:       0
+OP_STOP:        377             global_5be16b92_scp.bin, global_60efb803_scp.bin, global_638e40c8_scp.bin, global_ac2e8923_scp.bin, global_d595bcd1_scp.bin
+OP_ERR: 		0
+OP_RSVD1:       0
+OP_RSVD2:       0
+OP_RSVD3:       0
+OP_RSVD4:       0
+OP_RSVD5:       0
+OP_UNKNOWN:     0
