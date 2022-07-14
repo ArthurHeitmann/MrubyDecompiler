@@ -73,7 +73,7 @@ class RiteIrepSection:
 		uint32 iLen;
 		byte padding[-FTell() & 3];
 		if (iLen > 0) {
-			uint32 iSeqMrbCodes[iLen] <read=stringifyMrbCode>;	// TODO load.c L85, check byteorder
+			uint32 iSeqMrbCodes[iLen] <read=stringifyMrbCode>;
 		}
 
 		uint32 poolLen;

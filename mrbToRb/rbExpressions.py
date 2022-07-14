@@ -40,21 +40,17 @@ class LiteralEx(AnyValueExpression):
 	...
 SELF = LiteralEx(0, "self")
 NIL = LiteralEx(1, "nil")
+TRUE = LiteralEx(2, "true")
+FALSE = LiteralEx(3, "false")
 
 class SymbolEx(AnyValueExpression):
-	...
-
-class GlobalSymbolEx(SymbolEx):
-	...
-
-class InstanceSymbolEx(SymbolEx):
 	...
 
 class ClassSymbolEx(SymbolEx):
 	...
 MAIN_CLASS = ClassSymbolEx(0, "main")
 
-class TwoExpEx:
+class TwoExpEx(Expression):
 	left: Expression
 	right: Expression
 	
@@ -121,6 +117,14 @@ class MethodCallEx(Expression):
 	symbol: SymbolEx
 	args: List[Expression]
 
+	def __init__(self, register: int, srcObj: Expression, symbol: SymbolEx, args: List[Expression]):
+		super().__init__(register)
+		self.srcObj = srcObj
+		self.symbol = symbol
+		self.args = args
+		srcObj.hasUsages = True
+		symbol.hasUsages = True
+
 	def _toStr(self):
 		result = ""
 		if self.srcObj is not None and self.srcObj != MAIN_CLASS:
@@ -133,6 +137,11 @@ class MethodCallEx(Expression):
 
 class MethodCallWithBlockEx(MethodCallEx):
 	block: BlockEx
+
+	def __init__(self, register: int, srcObj: Expression, symbol: SymbolEx, args: List[Expression], block: BlockEx):
+		super().__init__(register, srcObj, symbol, args)
+		self.block = block
+		block.hasUsages = True
 
 	def _toStr(self):
 		return f"{super()._toStr()} {self.block}"
@@ -158,9 +167,12 @@ class ArrayEx(Expression):
 			newLine = "\n"
 			return f"[ {(',' + newLine).join(map(str, self.elements))} ]"
 
-class ArrayConcatEx(TwoCombinedExpEx):
+class ArrayConcatEx(TwoExpEx):
 	def __init__(self, register: int, left: Expression, right: Expression):
-		super().__init__(register, left, right, LiteralEx(0, "+"))
+		super().__init__(register, left, right)
+
+	def _toStr(self):
+		return f"{self.left}.push(*{self.right})"
 
 class ArrayPushEx(TwoCombinedExpEx):
 	def __init__(self, register: int, left: Expression, right: Expression):

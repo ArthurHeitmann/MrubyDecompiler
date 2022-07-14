@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Union
+from typing import Union, cast
 
 from mrbParser import RiteLvarRecord, RiteIrepSection
 from mrbToRb.codeGenerator import CodeGen
@@ -15,17 +15,19 @@ class OpCodeReader:
     currentClass: Any
     parent: OpCodeReader
     opcodes: OpCodeFeed
-    pool: List[bytes]
-    symbols: List[str]
+    pool: List[str]
+    symbols: List[SymbolEx]
     childIreps: List[RiteIrepSection]
-    localVarsMap: Dict[int, str]
+    localVarsMap: Dict[int, SymbolEx]
     codeGen: CodeGen
 
     def __init__(self, irep: RiteIrepSection, lvars: RiteLvarRecord, parent: OpCodeReader, curClass, codeGen: CodeGen):
         self.parent = parent
+        self.pool = list(map(lambda b: b.decode("shift-js", "ignore"), irep.pools))
+        self.symbols = list(map(lambda s: SymbolEx(0, s), irep.symbols))
         self.localVarsMap = {}
         for lvar in lvars.lvarRecords:
-            self.localVarsMap[lvar.symbolRegister] = lvar.symbol
+            self.localVarsMap[lvar.symbolRegister] = SymbolEx(0, lvar.symbol)
         self.registers = []
         for i in range(irep.numRegisterVariables):
             self.registers.append(Register(i, None, self.localVarsMap.get(i, None)))
@@ -37,202 +39,215 @@ class OpCodeReader:
     def step(self):
         opcode: Union[MrbCode, MrbCodeABC, MrbCodeABx, MrbCodeAsBx, MrbCodeAx]
         opcode = self.opcodes.cur()
-        self.codeGen.pushExp(LineCommentEx(str(opcode)))
+        self.codeGen.pushExp(LineCommentEx(0, str(opcode)))
+
+        def pushExpToCodeGen(regI: int, expression: Expression):
+            if regI in self.localVarsMap:
+                self.codeGen.pushExp(AssignmentEx(regI, self.localVarsMap[regI], expression))
+            else:
+                self.codeGen.pushExp(RegistryAssignmentEx(regI, self.registers[regI].symbol, expression))
+        
+        def unhandledOpCode():
+            raise Exception("Unhandled opcode: " + str(opcode))
 
         if opcode == AllOpCodes.OP_NOP:
             return
         elif opcode == AllOpCodes.OP_MOVE:
             self.registers[opcode.A].moveIn(self.registers[opcode.B])
-        elif opcode == AllOpCodes.OP_LOADL:
-            self.registers[opcode.A].load(StringEx(self.pool[opcode.Bx].decode(ENCODING)))
-        elif opcode == AllOpCodes.OP_LOADI:
-            self.registers[opcode.A].load(LiteralEx(opcode.sBx))
-        elif opcode == AllOpCodes.OP_LOADSYM:
-            self.registers[opcode.A].load(SymbolEx(self.symbols[opcode.Bx]))
-        elif opcode == AllOpCodes.OP_LOADNIL:
-            self.registers[opcode.A].load(LiteralEx("nil"))
-        elif opcode == AllOpCodes.OP_LOADSELF:
-            self.registers[opcode.A].load(LiteralEx("self"))
-        elif opcode == AllOpCodes.OP_LOADT:
-            self.registers[opcode.A].load(LiteralEx("true"))
-        elif opcode == AllOpCodes.OP_LOADF:
-            self.registers[opcode.A].load(LiteralEx("false"))
+            pushExpToCodeGen(opcode.A, self.registers[opcode.B].value)
+        elif AllOpCodes.OP_LOADL <= opcode <= AllOpCodes.OP_LOADF:
+            value: Expression
+            if opcode == AllOpCodes.OP_LOADL:
+                value = StringEx(opcode.A, self.pool[opcode.A].decode(ENCODING)) 
+            elif opcode == AllOpCodes.OP_LOADI:
+                value = LiteralEx(opcode.A, opcode.sBx)
+            elif opcode == AllOpCodes.OP_LOADSYM:
+                value = SymbolEx(opcode.A, self.symbols[opcode.A])
+            elif opcode == AllOpCodes.OP_LOADNIL:
+                value = NIL
+            elif opcode == AllOpCodes.OP_LOADSELF:
+                value = SELF
+            elif opcode == AllOpCodes.OP_LOADT:
+                value = TRUE
+            elif opcode == AllOpCodes.OP_LOADF:
+                value = FALSE
+            else:
+                raise Exception("Unknown load opcode " + str(opcode))
+            self.registers[opcode.A].load(value)
+            pushExpToCodeGen(opcode.A, value)
 
-        elif opcode == AllOpCodes.OP_GETGLOBAL:
-            self.registers[opcode.A].load(GlobalSymbolEx(self.symbols[opcode.Bx]))
-        elif opcode == AllOpCodes.OP_SETGLOBAL:
-            # TODO
-            pass
-        elif opcode == AllOpCodes.OP_GETSPECIAL:
-            # TODO
-            pass
-        elif opcode == AllOpCodes.OP_SETSPECIAL:
-            # TODO
-            pass
-        elif opcode == AllOpCodes.OP_GETIV:
-            self.registers[opcode.A].load(InstanceSymbolEx(self.symbols[opcode.Bx]))
-        elif opcode == AllOpCodes.OP_SETIV:
-            # TODO
-            pass
-        elif opcode == AllOpCodes.OP_GETCV:
-            self.registers[opcode.A].load(ClassSymbolEx(self.symbols[opcode.Bx]))
-        elif opcode == AllOpCodes.OP_SETCV:
-            # TODO
-            pass
-        elif opcode == AllOpCodes.OP_GETCONST:
-            self.registers[opcode.A].load(SymbolEx(self.symbols[opcode.Bx]))
-        elif opcode == AllOpCodes.OP_SETCONST:
-            # TODO
-            pass
+        elif opcode in { AllOpCodes.OP_GETGLOBAL, AllOpCodes.OP_GETSPECIAL, AllOpCodes.OP_GETIV, AllOpCodes.OP_GETCV, AllOpCodes.OP_GETCONST }:
+            exp = SymbolEx(opcode.A, self.symbols[opcode.A])
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
+        elif opcode in { AllOpCodes.OP_SETGLOBAL , AllOpCodes.OP_SETSPECIAL, AllOpCodes.OP_SETIV, AllOpCodes.OP_SETCV, AllOpCodes.OP_SETCONST }:
+            exp = AssignmentEx(opcode.A, SymbolEx(opcode.A, self.symbols[opcode.Bx]), self.registers[opcode.A].value)
+            self.codeGen.pushExp(exp)
         elif opcode == AllOpCodes.OP_GETMCNST:
-            # TODO
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_SETMCNST:
-            # TODO
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_GETUPVAR:
-            # TODO check
-            self.registers[opcode.A].load(SymbolEx(self.findUpVar(opcode.B)))
+            upVar = self.findUpVar(opcode.B)
+            self.registers[opcode.A].moveIn(upVar)
+            pushExpToCodeGen(opcode.A, upVar)
         elif opcode == AllOpCodes.OP_SETUPVAR:
-            # TODO
-            pass
+            unhandledOpCode()   # TODO
 
         elif opcode == AllOpCodes.OP_JMP:  # end of if
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_JMPIF:  # start of if or while
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_JMPNOT:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_ONERR:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_RESCUE:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_POPERR:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_RAISE:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_EPUSH:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_EPOP:
-            pass
+            unhandledOpCode()
 
         elif opcode == AllOpCodes.OP_SEND:
-            pass
+            args = [reg.value for reg in self.registers[opcode.A + 1: opcode.A + 1 + opcode.C]]
+            exp = MethodCallEx(opcode.A, self.registers[opcode.A].value, self.symbols[opcode.B], args)
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
         elif opcode == AllOpCodes.OP_SENDB:
-            pass
+            args = [reg.value for reg in self.registers[opcode.A + 1: opcode.A + 1 + opcode.C]]
+            block = self.registers[opcode.A + opcode.C + 1].value
+            exp = MethodCallWithBlockEx(opcode.A, self.registers[opcode.A].value, self.symbols[opcode.B], args, block)
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
         elif opcode == AllOpCodes.OP_FSEND:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_CALL:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_SUPER:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_ARGARY:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_ENTER:
+            # TODO
             pass
         elif opcode == AllOpCodes.OP_KARG:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_KDICT:
-            pass
+            unhandledOpCode()
 
         elif opcode == AllOpCodes.OP_RETURN:
+            # TODO
             pass
         elif opcode == AllOpCodes.OP_TAILCALL:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_BLKPUSH:
-            pass
+            unhandledOpCode()
 
-        elif opcode == AllOpCodes.OP_ADD:
-            pass
-        elif opcode == AllOpCodes.OP_ADDI:
-            pass
-        elif opcode == AllOpCodes.OP_SUB:
-            pass
-        elif opcode == AllOpCodes.OP_SUBI:
-            pass
-        elif opcode == AllOpCodes.OP_MUL:
-            pass
-        elif opcode == AllOpCodes.OP_DIV:
-            pass
-        elif opcode == AllOpCodes.OP_EQ:
-            pass
-        elif opcode == AllOpCodes.OP_LT:
-            pass
-        elif opcode == AllOpCodes.OP_LE:
-            pass
-        elif opcode == AllOpCodes.OP_GT:
-            pass
-        elif opcode == AllOpCodes.OP_GE:
-            pass
+        elif AllOpCodes.OP_ADD <= opcode <= AllOpCodes.OP_ADD + AllOpCodes.OP_DIV:
+            if opcode in { AllOpCodes.OP_ADD, AllOpCodes.OP_SUB, AllOpCodes.OP_MUL, AllOpCodes.OP_DIV }:
+                exp = TwoCombinedExpEx(opcode.A, self.registers[opcode.A].value, self.registers[opcode.A + 1].value, self.symbols[opcode.B])
+            elif opcode in { AllOpCodes.OP_ADDI, AllOpCodes.OP_SUBI }:
+                exp = TwoCombinedExpEx(opcode.A, self.registers[opcode.A].value, self.registers[opcode.C].value, self.symbols[opcode.B])
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
+        elif AllOpCodes.OP_EQ <= opcode <= AllOpCodes.OP_GE:
+            exp = BoolEx(opcode.A, self.registers[opcode.A].value, self.registers[opcode.A + 1].value, self.symbols[opcode.B])
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
 
         elif opcode == AllOpCodes.OP_ARRAY:
-            pass
+            elements = [reg.value for reg in self.registers[opcode.B : opcode.B + opcode.C]]
+            exp = ArrayEx(opcode.A, elements)
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
         elif opcode == AllOpCodes.OP_ARYCAT:
-            pass
+            exp = ArrayConcatEx(opcode.A, self.registers[opcode.A].value, self.registers[opcode.B].value)
+            self.codeGen.pushExp(exp)
         elif opcode == AllOpCodes.OP_ARYPUSH:
-            pass
+            exp = ArrayPushEx(opcode.A, self.registers[opcode.A].value, self.registers[opcode.B].value)
+            self.codeGen.pushExp(exp)
         elif opcode == AllOpCodes.OP_AREF:
-            pass
+            exp = ArrayRefEx(opcode.A, self.registers[opcode.B].value, opcode.C)
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
         elif opcode == AllOpCodes.OP_ASET:
-            pass
+            exp = ArraySetEx(opcode.A, cast(SymbolEx, self.registers[opcode.B].value), opcode.C, self.registers[opcode.A].value)
+            self.codeGen.pushExp(exp)
         elif opcode == AllOpCodes.OP_APOST:
-            pass
+            unhandledOpCode()
 
         elif opcode == AllOpCodes.OP_STRING:
-            pass
+            exp = StringEx(opcode.A, self.pool[opcode.Bx])
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
         elif opcode == AllOpCodes.OP_STRCAT:
-            pass
+            exp = StringConcatEx(opcode.A, self.registers[opcode.A].value, self.registers[opcode.B].value)
+            self.codeGen.pushExp(exp)
 
         elif opcode == AllOpCodes.OP_HASH:
-            pass
+            keys = self.registers[opcode.B : opcode.B + opcode.C*2 : 2]
+            values = self.registers[opcode.B + 1 : opcode.B + 1 + opcode.C*2 : 2]
+            combinedDict = dict(zip(keys, values))
+            exp = HashEx(opcode.A, combinedDict)
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
         elif opcode == AllOpCodes.OP_LAMBDA:
-            pass
+            unhandledOpCode()   # TODO
         elif opcode == AllOpCodes.OP_RANGE:
-            pass
+            exp = RangeEx(opcode.A, self.registers[opcode.B].value, self.registers[opcode.B + 1].value, bool(opcode.C))
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
 
         elif opcode == AllOpCodes.OP_OCLASS:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_CLASS:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_MODULE:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_EXEC:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_METHOD:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_SCLASS:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_TCLASS:
-            pass
+            pass    # TODO check
 
         elif opcode == AllOpCodes.OP_DEBUG:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_STOP:
-            pass
+            self.codeGen.pushExp(LineCommentEx(0, "STOP"))
         elif opcode == AllOpCodes.OP_ERR:
-            pass
+            unhandledOpCode()
 
         elif opcode == AllOpCodes.OP_RSVD1:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_RSVD2:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_RSVD3:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_RSVD4:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_RSVD5:
-            pass
+            unhandledOpCode()
         elif opcode == AllOpCodes.OP_UNKNOWN:
-            pass
+            unhandledOpCode()
+        else:
+            unhandledOpCode()
 
     def parseOps(self):
         for i in range(len(self.opcodes)):
             self.step()
 
-    def findUpVar(self, register: int) -> str:
-        for regI, symb in self.localVarsMap:
+    def findUpVar(self, register: int) -> Register:
+        for regI in self.localVarsMap.keys():
             if regI == register:
-                return symb
+                return self.registers[regI]
         if self.parent is not None:
             return self.parent.findUpVar(register)
         raise Exception("Could not find upvar for register " + str(register))
