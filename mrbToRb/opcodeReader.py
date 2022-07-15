@@ -222,7 +222,10 @@ class OpCodeReader:
             if nextOpcode.opcode == AllOpCodes.OP_METHOD:
                 self.opcodes.next()
                 srcObj = self.registers[nextOpcode.A].value
-                if isinstance(srcObj, SelfEx) and isinstance(self.currentClass, MainClass):
+                if srcObj is self.currentClass:
+                    srcObj.hasUsages = True
+                    srcObj = None
+                elif isinstance(srcObj, SelfEx) and isinstance(self.currentClass, MainClass):
                     srcObj = self.currentClass
                 exp = MethodEx(0, self.symbols[nextOpcode.B], args,
                                BlockEx(opcode.A, body), srcObj)
@@ -240,18 +243,45 @@ class OpCodeReader:
 
         # elif opcode.opcode == AllOpCodes.OP_OCLASS:
         #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_CLASS:
-        #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_MODULE:
-        #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_EXEC:
-        #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_METHOD:
-        #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_SCLASS:
-        #     unhandledOpCode()
+        elif opcode.opcode == AllOpCodes.OP_CLASS:
+            parentClass = self.registers[opcode.A + 1].value
+            if isinstance(parentClass, NilEx):
+                parentClass = None
+            exp = ClassSymbolEx(opcode.A, self.symbols[opcode.B], parentClass)
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
+        elif opcode.opcode == AllOpCodes.OP_MODULE:
+            exp = ModuleSymbolEx(opcode.A, self.symbols[opcode.B])
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
+        elif opcode.opcode == AllOpCodes.OP_EXEC:
+            target = self.registers[opcode.A].value
+            if not isinstance(target, ClassSymbolEx) and not isinstance(target, ModuleSymbolEx):
+                unhandledOpCode()
+            codeGen = CodeGen()
+            opcodeReader = OpCodeReader(self.childIreps[opcode.Bx], self.childLvars[opcode.Bx], self, target, codeGen)
+            opcodeReader.parseOps()
+            body = BlockEx(0, codeGen.getExpressions())
+            if isinstance(target, ClassSymbolEx):
+                exp = ClassEx(opcode.A, target, body, target.isSingleton)
+            else:
+                exp = ModuleEx(opcode.A, target, body)
+            self.codeGen.pushExp(exp)
+        elif opcode.opcode == AllOpCodes.OP_METHOD:
+            if self.opcodes.getRel(-2).opcode != AllOpCodes.OP_SCLASS and self.opcodes.getRel(-1) != AllOpCodes.OP_LAMBDA:
+                unhandledOpCode()
+            name = SymbolEx(0, f"{self.registers[opcode.A].value}.{self.symbols[opcode.B]}")
+            lambdaExp = cast(LambdaEx, self.registers[opcode.A + 1].value)
+            exp = MethodEx(opcode.A, name, lambdaExp.arguments, lambdaExp.body, self.registers[opcode.A].value)
+            self.codeGen.pushExp(exp)
+
+        elif opcode.opcode == AllOpCodes.OP_SCLASS:
+            exp = ClassSymbolEx(opcode.A, self.registers[opcode.B].value, None, True)
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
+
         elif opcode.opcode == AllOpCodes.OP_TCLASS:
-            classSym = copy.copy(self.currentClass)
+            classSym = self.currentClass
             self.registers[opcode.A].load(classSym)
             pushExpToCodeGen(opcode.A, classSym)
 
@@ -292,7 +322,7 @@ class OpCodeReader:
             return self.parent.findUpVar(register, True)
         raise Exception("Could not find upvar for register " + str(register))
 
-    def parseLambda(self, parentClass: Expression) -> Tuple[List[MethodArgumentEx], List[Expression]]:
+    def parseLambda(self, parentClass: SymbolEx) -> Tuple[List[MethodArgumentEx], List[Expression]]:
         args: List[MethodArgumentEx] = []
         body: List[Expression]
         opcode = cast(MrbCodeABzCz, self.opcodes.cur())

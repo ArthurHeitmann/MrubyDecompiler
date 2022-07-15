@@ -120,6 +120,15 @@ class SymbolValEx(LiteralEx):
 		return f":{self.value}"
 
 class ClassSymbolEx(SymbolEx):
+	parent: Expression
+	isSingleton: bool
+
+	def __init__(self, register: int, sym: Expression, parent: Expression|None = None, isSingleton: bool = False):
+		super().__init__(register, sym)
+		self.parent = parent
+		self.isSingleton = isSingleton
+
+class ModuleSymbolEx(SymbolEx):
 	...
 
 class TwoExpEx(Expression):
@@ -435,12 +444,6 @@ class MainClass(SymbolEx):
 # 		result += "\nend"
 # 		return result
 
-class ExecEx(Expression):
-	# TODO
-
-	def _toStr(self):
-		pass
-
 class StatementEx(AnyValueExpression):
 	def __init__(self, register: int, value: str):
 		super().__init__(register, value)
@@ -542,3 +545,46 @@ class LambdaEx(Expression):
 		else:
 			body = prefixLines(str(self.body), "\t")
 			return f"{{ {args}\n{body}\n}}"
+
+class ClassEx(Expression):
+	name: Expression
+	parentClass: Expression|None
+	isSingleton: bool
+	body: BlockEx
+
+	def __init__(self, register: int, name: ClassSymbolEx, body: BlockEx, isSingleton: bool = False):
+		super().__init__(register)
+		self.name = name
+		self.body = body
+		self.parentClass = name.parent
+		self.isSingleton = isSingleton
+		self.canBeOptimizedAway = False
+		name.hasUsages = True
+		if self.parentClass is not None:
+			self.parentClass.hasUsages = True
+
+	def _toStr(self):
+		if self.isSingleton:
+			start = f"class << {self.name}\n"
+		elif self.parentClass is not None:
+			start = f"class {self.name} < {self.parentClass}\n"
+		else:
+			start = f"class {self.name}\n"
+		body = prefixLines(str(self.body), "\t")
+		return f"{start}{body}\nend"
+
+class ModuleEx(Expression):
+	name: ModuleSymbolEx
+	body: BlockEx
+
+	def __init__(self, register: int, name: ModuleSymbolEx, body: BlockEx):
+		super().__init__(register)
+		self.name = name
+		self.body = body
+		self.canBeOptimizedAway = False
+		name.hasUsages = True
+
+	def _toStr(self):
+		start = f"module {self.name}\n"
+		body = prefixLines(str(self.body), "\t")
+		return f"{start}{body}\nend"

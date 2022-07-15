@@ -1,7 +1,7 @@
 from mrbParser import RiteFile
 from mrbToRb.mrbToRb import mrbToRb
 
-file = "./examples/methods.mrb"
+file = "./examples/classes.mrb"
 
 with open(file, "rb") as f:
     riteFile = RiteFile(f)
