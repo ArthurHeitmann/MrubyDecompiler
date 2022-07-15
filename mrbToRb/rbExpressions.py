@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any, List, Dict, Set
 import re
 
+from utils import prefixLines
+
 OperatorPriority: Dict[str, int] = {
 	"!": 0,
 	"~": 0,
@@ -161,8 +163,11 @@ class AssignmentEx(TwoCombinedExpEx):
 class BlockEx(Expression):
 	expressions: List[Expression]
 	
-	def __init__(self, register: int):
+	def __init__(self, register: int, expressions: List[Expression]):
 		super().__init__(register)
+		self.expressions = expressions
+		for expression in expressions:
+			expression.hasUsages = True
 
 	def addExpression(self, expression: Expression):
 		self.expressions.append(expression)
@@ -172,21 +177,9 @@ class BlockEx(Expression):
 		if len(self.expressions) == 0:
 			return ""
 		elif len(self.expressions) == 1:
-			return f" {self.expressions[0]} "
+			return str(self.expressions[0])
 		else:
-			result = ""
-			for expression in self.expressions:
-				result += f"{expression}\n"
-			return result
-
-class PassableBlockEx(BlockEx):
-	def _toStr(self):
-		if len(self.expressions) == 0:
-			return "{}"
-		elif len(self.expressions) == 1:
-			return f"{{ {super()._toStr()} }}"
-		else:
-			return f"{{\n{super()._toStr()}}}"
+			return "\n".join(map(str, self.expressions))
 
 AllOperatorsTwoExp: Set[str] = {
 	"*", "/", "%", "+", "-", "**",
@@ -247,9 +240,9 @@ class MethodCallEx(Expression):
 			return result
 
 class MethodCallWithBlockEx(MethodCallEx):
-	block: BlockEx
+	block: LambdaEx
 
-	def __init__(self, register: int, srcObj: Expression, symbol: SymbolEx, args: List[Expression], block: BlockEx):
+	def __init__(self, register: int, srcObj: Expression, symbol: SymbolEx, args: List[Expression], block: LambdaEx):
 		super().__init__(register, srcObj, symbol, args)
 		self.block = block
 		block.hasUsages = True
@@ -284,9 +277,6 @@ class ArrayEx(Expression):
 				return f"[ {', '.join(map(str, self.elements))} ]"
 
 class ArrayConcatEx(TwoExpEx):
-	def __init__(self, register: int, left: Expression, right: Expression):
-		super().__init__(register, left, right)
-
 	def _toStr(self):
 		return f"{self.left}.push(*{self.right})"
 
@@ -300,6 +290,7 @@ class ArrayRefEx(AnyValueExpression):
 	def __init__(self, register: int, array: Expression, index: int):
 		super().__init__(register, array)
 		self.index = index
+		array.hasUsages = True
 	
 	def _toStr(self):
 		return f"{self.value}[{self.index}]"
@@ -314,7 +305,8 @@ class ArraySetEx(Expression):
 		self.arrSymbol = arrSymbol
 		self.index = index
 		self.value = value
-		self.value.hasUsages = True
+		arrSymbol.hasUsages = True
+		value.hasUsages = True
 	
 	def _toStr(self):
 		return f"{self.arrSymbol}[{self.index}] = {self.value}"
@@ -324,9 +316,6 @@ class StringEx(AnyValueExpression):
 		return '"' + str(self.value).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 class StringConcatEx(TwoExpEx):
-	def __init__(self, register: int, left: Expression, right: Expression):
-		super().__init__(register, left, right)
-
 	def _toStr(self):
 		if isinstance(self.left, StringEx) and self.left.value == "":
 			return f'"{self.right}"'
@@ -384,6 +373,8 @@ class RangeEx(TwoExpEx):
 		self.min = minVal
 		self.max = maxVal
 		self.isMaxExclusive = isMaxExclusive
+		minVal.hasUsages = True
+		maxVal.hasUsages = True
 
 	def _toStr(self):
 		if self.isMaxExclusive:
@@ -391,58 +382,58 @@ class RangeEx(TwoExpEx):
 		else:
 			return f"{self.min}..{self.max}"
 
-class ClassEx(BlockEx):
-	className: SymbolEx
-	parentClass: Expression|None
+# class ClassEx(BlockEx):
+# 	className: SymbolEx
+# 	parentClass: Expression|None
+#
+# 	def __init__(self, register: int, className: SymbolEx, parentClass: Expression|None):
+# 		super().__init__(register)
+# 		self.className = className
+# 		self.parentClass = parentClass
+# 		self.canBeOptimizedAway = False
+#
+# 	def _toStr(self):
+# 		if self.parentClass is None or isinstance(self.parentClass, MainClass):
+# 			result = f"class {self.className}\n"
+# 		else:
+# 			result = f"class {self.className} < {self.parentClass}\n"
+#
+# 		result += super()._toStr()
+# 		result += "\nend"
+# 		return result
 
-	def __init__(self, register: int, className: SymbolEx, parentClass: Expression|None):
-		super().__init__(register)
-		self.className = className
-		self.parentClass = parentClass
-		self.canBeOptimizedAway = False
-
-	def _toStr(self):
-		if self.parentClass is None or isinstance(self.parentClass, MainClass):
-			result = f"class {self.className}\n"
-		else:
-			result = f"class {self.className} < {self.parentClass}\n"
-
-		result += super()._toStr()
-		result += "\nend"
-		return result
-
-class MainClass(ClassEx):
+class MainClass(SymbolEx):
 	def __init__(self, register: int):
-		super().__init__(register, SymbolEx(0, "main"), None)
+		super().__init__(register, SymbolEx(0, "main"))
 
-class SingletonClassEx(BlockEx):
-	object: Expression
-
-	def __init__(self, register: int, obj: Expression):
-		super().__init__(register)
-		self.object = obj
-		self.canBeOptimizedAway = False
-		self.object.hasUsages = True
-
-	def _toStr(self):
-		result = f"class << {self.object}\n"
-		result += super()._toStr()
-		result += "\nend"
-		return result
-
-class Module(BlockEx):
-	name: SymbolEx
-
-	def __init__(self, register: int, name: SymbolEx):
-		super().__init__(register)
-		self.name = name
-		self.canBeOptimizedAway = False
-
-	def _toStr(self):
-		result = f"module {self.name}\n"
-		result += super()._toStr()
-		result += "\nend"
-		return result
+# class SingletonClassEx(BlockEx):
+# 	object: Expression
+#
+# 	def __init__(self, register: int, obj: Expression):
+# 		super().__init__(register)
+# 		self.object = obj
+# 		self.canBeOptimizedAway = False
+# 		self.object.hasUsages = True
+#
+# 	def _toStr(self):
+# 		result = f"class << {self.object}\n"
+# 		result += super()._toStr()
+# 		result += "\nend"
+# 		return result
+#
+# class Module(BlockEx):
+# 	name: SymbolEx
+#
+# 	def __init__(self, register: int, name: SymbolEx):
+# 		super().__init__(register)
+# 		self.name = name
+# 		self.canBeOptimizedAway = False
+#
+# 	def _toStr(self):
+# 		result = f"module {self.name}\n"
+# 		result += super()._toStr()
+# 		result += "\nend"
+# 		return result
 
 class ExecEx(Expression):
 	# TODO
@@ -450,3 +441,104 @@ class ExecEx(Expression):
 	def _toStr(self):
 		pass
 
+class StatementEx(AnyValueExpression):
+	def __init__(self, register: int, value: str):
+		super().__init__(register, value)
+		self.canBeOptimizedAway = False
+
+class ReturnStatementEx(StatementEx):
+	returnValue: Expression|None
+
+	def __init__(self, register: int, returnValue: Expression|None):
+		super().__init__(register, "return")
+		self.returnValue = returnValue
+		if returnValue is not None:
+			returnValue.hasUsages = True
+
+	def _toStr(self):
+		if self.returnValue is None:
+			return "return"
+		else:
+			return f"return {self.returnValue}"
+
+class BreakStatementEx(StatementEx):
+	def __init__(self, register: int):
+		super().__init__(register, "break")
+
+class MethodArgumentEx(Expression):
+	name: SymbolEx
+	prefix: str
+	defaultValue: Expression|None
+
+	def __init__(self, register: int, name: SymbolEx, defaultValue: Expression|None = None, prefix: str = ""):
+		super().__init__(register)
+		self.name = name
+		self.prefix = prefix
+		self.defaultValue = defaultValue
+		self.canBeOptimizedAway = False
+		name.hasUsages = True
+		if defaultValue is not None:
+			defaultValue.hasUsages = True
+
+	def _toStr(self):
+		if self.defaultValue is None:
+			return f"{self.prefix}{self.name}"
+		else:
+			return f"{self.prefix}{self.name} = {self.defaultValue}"
+
+class MethodEx(Expression):
+	parentObject: Expression|None
+	name: SymbolEx
+	arguments: List[MethodArgumentEx]
+	body: BlockEx
+
+	def __init__(self, register: int, name: SymbolEx, arguments: List[MethodArgumentEx], body: BlockEx, parentObject: Expression|None):
+		super().__init__(register)
+		self.name = name
+		self.arguments = arguments
+		self.body = body
+		self.parentObject = parentObject
+		self.canBeOptimizedAway = False
+		name.hasUsages = True
+		for arg in arguments:
+			arg.hasUsages = True
+		body.hasUsages = True
+		if parentObject is not None:
+			parentObject.hasUsages = True
+
+	def _toStr(self):
+		if self.parentObject is None:
+			result = f"def {self.name}("
+		else:
+			result = f"def {self.parentObject}.{self.name}("
+		if len(self.arguments) > 0:
+			result += ", ".join(map(str, self.arguments))
+		result += ")\n"
+		result += prefixLines(str(self.body), "\t")
+		result += "\nend\n"
+		return result
+
+class LambdaEx(Expression):
+	arguments: List[MethodArgumentEx]
+	body: BlockEx
+
+	def __init__(self, register: int, arguments: List[MethodArgumentEx], body: BlockEx):
+		super().__init__(register)
+		self.arguments = arguments
+		self.body = body
+		self.canBeOptimizedAway = True
+		for arg in arguments:
+			arg.hasUsages = True
+		body.hasUsages = True
+
+	def _toStr(self):
+		args = ""
+		if len(self.arguments) > 0:
+			args = f"|{', '.join(map(str, self.arguments))}| "
+		if len(self.body.expressions) == 0:
+			return f"{{ {args}nil }}"
+		elif len(self.body.expressions) == 1:
+			return f"{{ {args}{self.body} }}"
+		else:
+			body = prefixLines(str(self.body), "\t")
+			return f"{{ {args}\n{body}\n}}"

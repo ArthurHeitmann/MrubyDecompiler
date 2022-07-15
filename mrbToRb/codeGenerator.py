@@ -5,10 +5,12 @@ from mrbToRb.rbExpressions import Expression, LineCommentEx
 
 class CodeGen:
 	expressions: List[Expression]
+	includeComments: bool
 
-	def __init__(self) -> None:
+	def __init__(self, includeComments: bool = False):
 		self.expressions = []
-	
+		self.includeComments = includeComments
+
 	def pushExp(self, expression: Expression) -> None:
 		self.expressions.append(expression)
 
@@ -21,14 +23,22 @@ class CodeGen:
 		else:
 			self.expressions.pop(lastIndex)
 
-	def toStr(self, includeComments: bool, includeRegAssigns: bool) -> str:
+	def toStr(self) -> str:
 		result = ""
 		for exp in self.expressions:
-			if not includeComments and isinstance(exp, LineCommentEx):
-				continue
-			# if not includeRegAssigns and isinstance(exp, RegisterAssignmentEx):
-			# 	continue
 			if exp.canBeOptimizedAway and exp.hasUsages:
+				continue
+			if not self.includeComments and isinstance(exp, LineCommentEx):
 				continue
 			result += f"{exp}\n"
 		return result[:-1]
+
+	def getExpressions(self) -> List[Expression]:
+		exps: List[Expression] = []
+		for exp in self.expressions:
+			if exp.canBeOptimizedAway and exp.hasUsages:
+				continue
+			if not self.includeComments and isinstance(exp, LineCommentEx):
+				continue
+			exps.append(exp)
+		return exps

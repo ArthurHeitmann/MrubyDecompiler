@@ -1,24 +1,27 @@
 from __future__ import annotations
 from typing import Any
 
-from mrbToRb.rbExpressions import Expression, SymbolEx
+from mrbToRb.rbExpressions import Expression, SymbolEx, NilEx
 
 
 class Register:
 	i: int
 	regSymbol: SymbolEx
 	value: Expression
-	lvarName: str
+	lvarSymbol: SymbolEx
 
-	def __init__(self, i: int, value: Any, lvarName: str = None):
+	def __init__(self, i: int, lvarName: str = None):
 		self.i = i
 		self.regSymbol = SymbolEx(i, f"_r_{i}")
-		self.value = value
-		self.lvarName = lvarName
+		if lvarName:
+			self.lvarSymbol = SymbolEx(i, lvarName)
+		else:
+			self.lvarSymbol = None
+		self.value = self.lvarSymbol if lvarName else NilEx(0)
 
 	def moveIn(self, other: Register):
-		if other.lvarName:
-			self.value = SymbolEx(self.i, other.lvarName)
+		if other.lvarSymbol:
+			self.value = other.lvarSymbol
 		else:
 			self.value = other.value
 

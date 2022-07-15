@@ -54,6 +54,9 @@ class MrbCodeAsBx(MrbCode):
 		self.A = (mrbCode >> 23) & 0x1ff
 		self.sBx = ctypes.c_int32(((mrbCode >> 7) & 0xffff) - (0xffff >> 1)).value
 
+	def __str__(self) -> str:
+		return f"{opcodes[self.opcode][0]}:  A: 0x{self.A:x} sBx: 0x{self.sBx:x}"
+
 class MrbCodeAx(MrbCode):
 	# Ax:OP = 25:7
 	Ax: int
@@ -77,6 +80,9 @@ class MrbCodeABzCz(MrbCode):
 		self.Bz = (mrbCode >> 9) & 0x3fff
 		self.Cz = (mrbCode >> 7) & 0x3
 
+	def __str__(self) -> str:
+		return f"{opcodes[self.opcode][0]}:  A: 0x{self.A:x} Bz: 0x{self.Bz:x} Cz: 0x{self.Cz:x}"
+
 class MrbCodeAspec(MrbCode):
 	# Aw:Bw:Cw:Dw:Ew:Fw:Gw:OP = 2:5:5:1:5:5:1:1:7
 	req: int
@@ -97,7 +103,6 @@ class MrbCodeAspec(MrbCode):
 		self.key = (Ax >> 2) & 0x1f
 		self.kdict = (Ax >> 1) & 0x1
 		self.block = Ax & 0x1
-		print(self)
 
 	def __str__(self) -> str:
 		return f"{opcodes[self.opcode][0]}:  req: {self.req} opt: {self.opt} rest: {self.rest} post: {self.post} key: {self.key} kdict: {self.kdict} block: {self.block}"

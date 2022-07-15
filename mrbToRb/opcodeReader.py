@@ -1,5 +1,7 @@
 from __future__ import annotations
-from typing import Union, cast
+
+import copy
+from typing import cast, Tuple
 
 from mrbParser import RiteLvarRecord, RiteIrepSection
 from mrbToRb.codeGenerator import CodeGen
@@ -7,7 +9,7 @@ from mrbToRb.opCodeFeed import OpCodeFeed
 from mrbToRb.register import Register
 from mrbToRb.rbExpressions import *
 from opcodes import *
-from consts import ENCODING
+from utils import ENCODING
 
 
 class OpCodeReader:
@@ -18,6 +20,7 @@ class OpCodeReader:
     pool: List[str]
     symbols: List[SymbolEx]
     childIreps: List[RiteIrepSection]
+    childLvars: List[RiteLvarRecord]
     localVarsMap: Dict[int, SymbolEx]
     codeGen: CodeGen
 
@@ -30,14 +33,14 @@ class OpCodeReader:
             self.localVarsMap[lvar.symbolRegister] = SymbolEx(lvar.symbolRegister, lvar.symbol)
         self.registers = []
         for i in range(irep.numRegisterVariables):
-            self.registers.append(Register(i, NilEx(0), self.localVarsMap.get(i, None)))
+            self.registers.append(Register(i, self.localVarsMap.get(i, None)))
         self.currentClass = curClass
         self.opcodes = OpCodeFeed(irep.mrbCodes)
         self.childIreps = irep.childIreps
+        self.childLvars = lvars.childLvars
         self.codeGen = codeGen
 
     def step(self):
-        opcode: Union[MrbCode, MrbCodeABC, MrbCodeABx, MrbCodeAsBx, MrbCodeAx]
         opcode = self.opcodes.cur()
         # self.codeGen.pushExp(LineCommentEx(0, str(opcode)))
 
@@ -115,7 +118,7 @@ class OpCodeReader:
 
         elif opcode.opcode == AllOpCodes.OP_SEND:
             args = [reg.value for reg in self.registers[opcode.A + 1: opcode.A + 1 + opcode.C]]
-            srcObj: SymbolEx|None = self.registers[opcode.A].value
+            srcObj: Expression|None = self.registers[opcode.A].value
             if isinstance(srcObj, SelfEx) and isinstance(self.currentClass, MainClass):
                 srcObj.hasUsages = True
                 srcObj = None
@@ -124,8 +127,8 @@ class OpCodeReader:
             pushExpToCodeGen(opcode.A, exp)
         elif opcode.opcode == AllOpCodes.OP_SENDB:      # TODO check
             args = [reg.value for reg in self.registers[opcode.A + 1: opcode.A + 1 + opcode.C]]
-            block = self.registers[opcode.A + opcode.C + 1].value
-            exp = MethodCallWithBlockEx(opcode.A, self.registers[opcode.A].value, self.symbols[opcode.B], args, cast(BlockEx, block))
+            block = cast(LambdaEx, self.registers[opcode.A + opcode.C + 1].value)
+            exp = MethodCallWithBlockEx(opcode.A, self.registers[opcode.A].value, self.symbols[opcode.B], args, block)
             self.registers[opcode.A].load(exp)
             pushExpToCodeGen(opcode.A, exp)
         # elif opcode.opcode == AllOpCodes.OP_FSEND:
@@ -145,8 +148,15 @@ class OpCodeReader:
         #     unhandledOpCode()
 
         elif opcode.opcode == AllOpCodes.OP_RETURN:
-            # TODO
-            pass
+            retStatement: StatementEx
+            if opcode.B == 0:
+                if opcode.A in self.localVarsMap:
+                    retValue = self.registers[opcode.A].value
+                    retStatement = ReturnStatementEx(opcode.A, retValue)
+                    self.codeGen.pushExp(retStatement)
+            elif opcode.B == 1:
+                retStatement = BreakStatementEx(opcode.A)
+                self.codeGen.pushExp(retStatement)
         # elif opcode.opcode == AllOpCodes.OP_TAILCALL:
         #     unhandledOpCode()
         # elif opcode.opcode == AllOpCodes.OP_BLKPUSH:
@@ -205,8 +215,24 @@ class OpCodeReader:
             exp = HashEx(opcode.A, combinedDict)
             self.registers[opcode.A].load(exp)
             pushExpToCodeGen(opcode.A, exp)
+
         elif opcode.opcode == AllOpCodes.OP_LAMBDA:
-            unhandledOpCode()   # TODO
+            args, body = self.parseLambda(self.currentClass)
+            nextOpcode = self.opcodes.getRel(1)
+            if nextOpcode.opcode == AllOpCodes.OP_METHOD:
+                self.opcodes.next()
+                srcObj = self.registers[nextOpcode.A].value
+                if isinstance(srcObj, SelfEx) and isinstance(self.currentClass, MainClass):
+                    srcObj = self.currentClass
+                exp = MethodEx(0, self.symbols[nextOpcode.B], args,
+                               BlockEx(opcode.A, body), srcObj)
+                self.codeGen.pushExp(exp)
+            else:
+                exp = LambdaEx(opcode.A, args, BlockEx(0, body))
+                self.registers[opcode.A].load(exp)
+                pushExpToCodeGen(opcode.A, exp)
+
+
         elif opcode.opcode == AllOpCodes.OP_RANGE:
             exp = RangeEx(opcode.A, self.registers[opcode.B].value, self.registers[opcode.B + 1].value, bool(opcode.C))
             self.registers[opcode.A].load(exp)
@@ -225,7 +251,9 @@ class OpCodeReader:
         # elif opcode.opcode == AllOpCodes.OP_SCLASS:
         #     unhandledOpCode()
         elif opcode.opcode == AllOpCodes.OP_TCLASS:
-            pass    # TODO check
+            classSym = copy.copy(self.currentClass)
+            self.registers[opcode.A].load(classSym)
+            pushExpToCodeGen(opcode.A, classSym)
 
         # elif opcode.opcode == AllOpCodes.OP_DEBUG:
         #     unhandledOpCode()
@@ -252,13 +280,70 @@ class OpCodeReader:
         self.opcodes.next()
 
     def parseOps(self):
-        for i in range(len(self.opcodes)):
+        while self.opcodes.hasNext():
             self.step()
 
-    def findUpVar(self, register: int) -> Register:
-        for regI in self.localVarsMap.keys():
-            if regI == register:
-                return self.registers[regI]
+    def findUpVar(self, register: int, checkSelf = False) -> Register:
+        if checkSelf:
+            for regI in self.localVarsMap.keys():
+                if regI == register:
+                    return self.registers[regI]
         if self.parent is not None:
-            return self.parent.findUpVar(register)
+            return self.parent.findUpVar(register, True)
         raise Exception("Could not find upvar for register " + str(register))
+
+    def parseLambda(self, parentClass: Expression) -> Tuple[List[MethodArgumentEx], List[Expression]]:
+        args: List[MethodArgumentEx] = []
+        body: List[Expression]
+        opcode = cast(MrbCodeABzCz, self.opcodes.cur())
+        irep = self.childIreps[opcode.Bz]
+        lvars = self.childLvars[opcode.Bz]
+        methodStartPointer = 1
+
+        # args
+        lvarIndex = 0
+        enterOpcode = cast(MrbCodeAspec, irep.mrbCodes[0])
+        for i in range(enterOpcode.req):
+            argReg = lvars.lvarRecords[lvarIndex].symbolRegister
+            argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
+            args.append(MethodArgumentEx(argReg, argSym))
+            lvarIndex += 1
+        instructionsPointer = 1
+        for i in range(enterOpcode.opt):
+            argReg = lvars.lvarRecords[lvarIndex].symbolRegister
+            argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
+
+            jmpStartInstruction = cast(MrbCodeAsBx, irep.mrbCodes[i + 1])
+            jmpEndInstruction = cast(MrbCodeAsBx, irep.mrbCodes[i + 2])
+            methodStartPointer = instructionsPointer + jmpEndInstruction.sBx + 1
+            startPointer = instructionsPointer + jmpStartInstruction.sBx
+            endPointer = instructionsPointer + jmpEndInstruction.sBx + 1
+            tmpIrep = copy.deepcopy(irep)
+            tmpIrep.mrbCodes = tmpIrep.mrbCodes[startPointer : endPointer]
+            opcodeReader = OpCodeReader(tmpIrep, lvars, self, parentClass, CodeGen())
+            opcodeReader.parseOps()
+            argVal = opcodeReader.registers[lvars.lvarRecords[lvarIndex].symbolRegister].value
+
+            args.append(MethodArgumentEx(argReg, argSym, argVal))
+
+            instructionsPointer += 1
+            lvarIndex += 1
+        if enterOpcode.rest:
+            argReg = lvars.lvarRecords[lvarIndex].symbolRegister
+            argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
+            args.append(MethodArgumentEx(argReg, argSym, None, "*"))
+            lvarIndex += 1
+        if enterOpcode.block:
+            argReg = lvars.lvarRecords[lvarIndex].symbolRegister
+            argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
+            args.append(MethodArgumentEx(argReg, argSym, None, "&"))
+            lvarIndex += 1
+
+        # body
+        irep.mrbCodes = irep.mrbCodes[methodStartPointer:]
+        codeGen = CodeGen()
+        opcodeReader = OpCodeReader(irep, lvars, self, parentClass, codeGen)
+        opcodeReader.parseOps()
+        body = codeGen.getExpressions()
+
+        return args, body
