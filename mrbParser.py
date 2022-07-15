@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import BinaryIO, List, Union
+from typing import BinaryIO, List
 from ioUtils import *
 from opcodes import MrbCode, getMrbCode
 
@@ -16,8 +16,8 @@ class RiteBinaryHeader:
 	} riteHeader;
 	"""
 	binaryIdentifier: str
-	binaryFormatMajorVersion: int
-	binaryFormatMinorVersion: int
+	binaryFormatMajorVersion: str
+	binaryFormatMinorVersion: str
 	crc: int
 	binarySize: int
 	compilerName: str
@@ -151,7 +151,7 @@ class RiteLvar:
 		uint16 symbolRegister;
 	};
 	"""
-	symbol: str
+	symbol: str|None
 	symbolRegister: int
 
 	def __init__(self, file: BinaryIO, symbols: List[str]) -> None:

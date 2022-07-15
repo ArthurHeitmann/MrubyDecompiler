@@ -1,6 +1,6 @@
 from typing import List
 
-from mrbToRb.rbExpressions import Expression
+from mrbToRb.rbExpressions import Expression, LineCommentEx
 
 
 class CodeGen:
@@ -20,3 +20,15 @@ class CodeGen:
 			self.expressions[lastIndex] = replacement
 		else:
 			self.expressions.pop(lastIndex)
+
+	def toStr(self, includeComments: bool, includeRegAssigns: bool) -> str:
+		result = ""
+		for exp in self.expressions:
+			if not includeComments and isinstance(exp, LineCommentEx):
+				continue
+			# if not includeRegAssigns and isinstance(exp, RegisterAssignmentEx):
+			# 	continue
+			if exp.canBeOptimizedAway and exp.hasUsages:
+				continue
+			result += f"{exp}\n"
+		return result[:-1]

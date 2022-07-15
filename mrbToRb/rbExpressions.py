@@ -1,5 +1,56 @@
-from typing import Any, List, Dict, Optional
+from __future__ import annotations
+
+from typing import Any, List, Dict, Set
 import re
+
+OperatorPriority: Dict[str, int] = {
+	"!": 0,
+	"~": 0,
+	"+@": 0,
+	"**": 1,
+	"-@": 2,
+	"*": 3,
+	"/": 3,
+	"%": 3,
+	"+": 4,
+	"-": 4,
+	"<<": 5,
+	">>": 5,
+	"&": 6,
+	"|": 7,
+	"^": 7,
+	">": 8,
+	">=": 8,
+	"<": 8,
+	"<=": 8,
+	"<=>": 9,
+	"==": 9,
+	"===": 9,
+	"!=": 9,
+	"=~": 9,
+	"!~": 9,
+	"&&": 10,
+	"||": 11,
+	"..": 12,
+	"...": 12,
+	"?": 13,
+	":": 13,
+	# "modifier-rescue": 14,
+	"=": 15,
+	"+=": 15,
+	"-=": 15,
+	"*=": 15,
+	"/=": 15,
+	"%=": 15,
+	"&=": 15,
+	"|=": 15,
+	"^=": 15,
+	"<<=": 15,
+	">>=": 15,
+	"&&=": 15,
+	"||=": 15,
+	"**=": 15,
+}
 
 
 class Expression:
@@ -7,11 +58,13 @@ class Expression:
 	hasUsages: bool
 	canBeOptimizedAway: bool
 	register: int
-	
+	associatedSymbol: Expression|None
+
 	def __init__(self, register: int):
 		self.hasUsages = False
 		self.canBeOptimizedAway = True
 		self.register = register
+		self.associatedSymbol = None
 
 	def __str__(self):
 		return self._toStr()
@@ -37,18 +90,35 @@ class LineCommentEx(AnyValueExpression):
 		return f"#{self.value}"
 
 class LiteralEx(AnyValueExpression):
-	...
-SELF = LiteralEx(0, "self")
-NIL = LiteralEx(1, "nil")
-TRUE = LiteralEx(2, "true")
-FALSE = LiteralEx(3, "false")
+	def _toStr(self):
+		strVal = str(self.value)
+		if re.match(r"\d+\.\d+e[+-]\d+", strVal):
+			return str(float(strVal))
+		else:
+			return strVal
+
+class SelfEx(LiteralEx):
+	def __init__(self, register: int):
+		super().__init__(register, "self")
+class NilEx(LiteralEx):
+	def __init__(self, register: int):
+		super().__init__(register, "nil")
+class TrueEx(LiteralEx):
+	def __init__(self, register: int):
+		super().__init__(register, "true")
+class FalseEx(LiteralEx):
+	def __init__(self, register: int):
+		super().__init__(register, "false")
 
 class SymbolEx(AnyValueExpression):
 	...
 
+class SymbolValEx(LiteralEx):
+	def _toStr(self):
+		return f":{self.value}"
+
 class ClassSymbolEx(SymbolEx):
 	...
-MAIN_CLASS = ClassSymbolEx(0, "main")
 
 class TwoExpEx(Expression):
 	left: Expression
@@ -63,13 +133,23 @@ class TwoExpEx(Expression):
 
 class TwoCombinedExpEx(TwoExpEx):
 	operator: Expression
+	priority: int
 	
 	def __init__(self, register: int, left: Expression, right: Expression, operator: Expression):
 		super().__init__(register, left, right)
 		self.operator = operator
+		self.priority = OperatorPriority.get(str(operator), 99)
 	
 	def _toStr(self):
-		return f"{self.left} {self.operator} {self.right}"
+		if isinstance(self.left, TwoCombinedExpEx) and self.left.priority > self.priority:
+			left = f"({self.left})"
+		else:
+			left = self.left
+		if isinstance(self.right, TwoCombinedExpEx) and self.right.priority > self.priority:
+			right = f"({self.right})"
+		else:
+			right = self.right
+		return f"{left} {self.operator} {right}"
 
 class AssignmentEx(TwoCombinedExpEx):
 	def __init__(self, register: int, left: Expression, right: Expression):
@@ -77,10 +157,6 @@ class AssignmentEx(TwoCombinedExpEx):
 
 	def _toStr(self):
 		return f"{self.left} = {self.right}"
-
-class RegistryAssignmentEx(AssignmentEx):
-	def _toStr(self):
-		return f"_r_{self.left} = {self.right}"
 
 class BlockEx(Expression):
 	expressions: List[Expression]
@@ -112,28 +188,63 @@ class PassableBlockEx(BlockEx):
 		else:
 			return f"{{\n{super()._toStr()}}}"
 
+AllOperatorsTwoExp: Set[str] = {
+	"*", "/", "%", "+", "-", "**",
+	"<<", ">>",
+	"&", "|", "^",
+	">", ">=", "<", "<=", "<=>", "==", "===", "!=", "=~", "!~",
+	"&&", "||",
+	"..", "...",
+	"?", ":",
+	"=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "&&=", "||=", "**=",
+}
+AllUnanaryOperators: Set[str] = {
+	"+@", "-@", "~", "!",
+}
+
 class MethodCallEx(Expression):
 	srcObj: Expression
 	symbol: SymbolEx
 	args: List[Expression]
+	isOperatorCall: bool
+	operatorPriority: int
 
-	def __init__(self, register: int, srcObj: Expression, symbol: SymbolEx, args: List[Expression]):
+	def __init__(self, register: int, srcObj: Expression|None, symbol: SymbolEx, args: List[Expression]):
 		super().__init__(register)
 		self.srcObj = srcObj
 		self.symbol = symbol
 		self.args = args
-		srcObj.hasUsages = True
+		self.isOperatorCall = str(symbol) in AllOperatorsTwoExp and len(args) == 1 or str(symbol) in AllUnanaryOperators and len(args) == 0
+		self.operatorPriority = OperatorPriority.get(str(symbol), 99)
+		if srcObj is not None:
+			srcObj.hasUsages = True
 		symbol.hasUsages = True
+		for arg in args:
+			arg.hasUsages = True
 
 	def _toStr(self):
-		result = ""
-		if self.srcObj is not None and self.srcObj != MAIN_CLASS:
-			result += f"{self.srcObj}."
-		if len(self.args) == 0:
-			result += f"{self.symbol}"
+		if self.isOperatorCall:
+			if str(self.symbol) in AllOperatorsTwoExp:
+				if isinstance(self.srcObj, SymbolEx) or isinstance(self.srcObj, LiteralEx):
+					left = self.srcObj
+				else:
+					left = f"({self.srcObj})"
+				if isinstance(self.args[0], SymbolEx) or isinstance(self.args[0], LiteralEx):
+					right = self.args[0]
+				else:
+					right = f"({self.args[0]})"
+				return f"{left} {self.symbol} {right}"
+			else:
+				return f"{str(self.symbol).replace('@', '')}{self.srcObj}"
 		else:
+			result = ""
+			if self.srcObj is not None and not isinstance(self.srcObj, MainClass):
+				if isinstance(self.srcObj, SymbolEx) or isinstance(self.srcObj, LiteralEx):
+					result += f"{self.srcObj}."
+				else:
+					result += f"({self.srcObj})."
 			result += f"{self.symbol}({', '.join(map(str, self.args))})"
-		return result
+			return result
 
 class MethodCallWithBlockEx(MethodCallEx):
 	block: BlockEx
@@ -146,7 +257,7 @@ class MethodCallWithBlockEx(MethodCallEx):
 	def _toStr(self):
 		return f"{super()._toStr()} {self.block}"
 
-class BoolEx(TwoCombinedExpEx):
+class BoolExpEx(TwoCombinedExpEx):
 	...
 
 class ArrayEx(Expression):
@@ -164,8 +275,13 @@ class ArrayEx(Expression):
 		elif len(self.elements) == 1:
 			return f"[ {self.elements[0]} ]"
 		else:
-			newLine = "\n"
-			return f"[ {(',' + newLine).join(map(str, self.elements))} ]"
+			elements = list(map(str, self.elements))
+			elementsTotalLen = sum(map(len, elements)) + 2 * (len(elements) - 1)
+			if elementsTotalLen > 80:
+				joiner = ",\n\t"
+				return f"[\n\t{joiner.join(map(str, self.elements))}\n]"
+			else:
+				return f"[ {', '.join(map(str, self.elements))} ]"
 
 class ArrayConcatEx(TwoExpEx):
 	def __init__(self, register: int, left: Expression, right: Expression):
@@ -205,7 +321,7 @@ class ArraySetEx(Expression):
 
 class StringEx(AnyValueExpression):
 	def _toStr(self):
-		return f'"{self.value}"'
+		return '"' + str(self.value).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 class StringConcatEx(TwoExpEx):
 	def __init__(self, register: int, left: Expression, right: Expression):
@@ -214,11 +330,13 @@ class StringConcatEx(TwoExpEx):
 	def _toStr(self):
 		if isinstance(self.left, StringEx) and self.left.value == "":
 			return f'"{self.right}"'
-		elif isinstance(self.left, StringConcatEx):
-			flatExps = self.flattenConcat()
-			return "\"" + ("".join(map(lambda ex: f"#{{{ex}}}", flatExps))) + "\""
+		parts: List[Expression]
+		if isinstance(self.left, StringConcatEx):
+			parts = self.flattenConcat()
 		else:
-			return f"\"#{{{self.left}}}#{{{self.right}}}\""
+			parts = [self.left, self.right]
+		partsStr = map(lambda x: x.value if isinstance(x, StringEx) else f"#{{{x}}}", parts)
+		return f"\"{''.join(partsStr)}\""
 
 	def flattenConcat(self) -> List[Expression]:
 		flat: List[Expression] = []
@@ -275,16 +393,16 @@ class RangeEx(TwoExpEx):
 
 class ClassEx(BlockEx):
 	className: SymbolEx
-	parentClass: Optional[Expression]
+	parentClass: Expression|None
 
-	def __init__(self, register: int, className: SymbolEx, parentClass: Expression = NIL):
+	def __init__(self, register: int, className: SymbolEx, parentClass: Expression|None):
 		super().__init__(register)
 		self.className = className
 		self.parentClass = parentClass
 		self.canBeOptimizedAway = False
 
 	def _toStr(self):
-		if self.parentClass is NIL:
+		if self.parentClass is None or isinstance(self.parentClass, MainClass):
 			result = f"class {self.className}\n"
 		else:
 			result = f"class {self.className} < {self.parentClass}\n"
@@ -293,7 +411,9 @@ class ClassEx(BlockEx):
 		result += "\nend"
 		return result
 
-OBJECT_CLASS = ClassEx(0, SymbolEx(0, "Object"))
+class MainClass(ClassEx):
+	def __init__(self, register: int):
+		super().__init__(register, SymbolEx(0, "main"), None)
 
 class SingletonClassEx(BlockEx):
 	object: Expression
@@ -304,7 +424,7 @@ class SingletonClassEx(BlockEx):
 		self.canBeOptimizedAway = False
 		self.object.hasUsages = True
 
-	def __str__(self):
+	def _toStr(self):
 		result = f"class << {self.object}\n"
 		result += super()._toStr()
 		result += "\nend"

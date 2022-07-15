@@ -17,6 +17,7 @@ class MrbCode:
 		return opcodes[self.opcode][0]
 
 class MrbCodeABC(MrbCode):
+	# A:B:C:OP = 9:9:7:7
 	A: int
 	B: int
 	C: int
@@ -31,6 +32,7 @@ class MrbCodeABC(MrbCode):
 		return f"{opcodes[self.opcode][0]}:  A: 0x{self.A:x} B: 0x{self.B:x} C: 0x{self.C:x}"
 
 class MrbCodeABx(MrbCode):
+	# A:Bx:OP = 9:16:7
 	A: int
 	Bx: int
 
@@ -43,6 +45,7 @@ class MrbCodeABx(MrbCode):
 		return f"{opcodes[self.opcode][0]}:  A: 0x{self.A:x} Bx: 0x{self.Bx:x}"
 
 class MrbCodeAsBx(MrbCode):
+	# A:sBx:OP = 9:16:7		(sBx is signed)
 	A: int
 	sBx: int
 
@@ -52,6 +55,7 @@ class MrbCodeAsBx(MrbCode):
 		self.sBx = ctypes.c_int32(((mrbCode >> 7) & 0xffff) - (0xffff >> 1)).value
 
 class MrbCodeAx(MrbCode):
+	# Ax:OP = 25:7
 	Ax: int
 
 	def __init__(self, mrbCode: int) -> None:
@@ -62,6 +66,7 @@ class MrbCodeAx(MrbCode):
 		return f"{opcodes[self.opcode][0]}:  Ax: 0x{self.Ax:x}"
 
 class MrbCodeABzCz(MrbCode):
+	# A:Bz:Cz:OP = 9:14:2:7
 	A: int
 	Bz: int
 	Cz: int
@@ -71,7 +76,31 @@ class MrbCodeABzCz(MrbCode):
 		self.A = (mrbCode >> 23) & 0x1ff
 		self.Bz = (mrbCode >> 9) & 0x3fff
 		self.Cz = (mrbCode >> 7) & 0x3
-		
+
+class MrbCodeAspec(MrbCode):
+	# Aw:Bw:Cw:Dw:Ew:Fw:Gw:OP = 2:5:5:1:5:5:1:1:7
+	req: int
+	opt: int
+	rest: int
+	post: int
+	key: int
+	kdict: int
+	block: int
+
+	def __init__(self, mrbCode: int) -> None:
+		super().__init__(mrbCode)
+		Ax = (mrbCode >> 7) & 0x1ffffff
+		self.req = (Ax >> 18) & 0x1f
+		self.opt = (Ax >> 13) & 0x1f
+		self.rest = (Ax >> 12) & 0x1
+		self.post = (Ax >> 7) & 0x1f
+		self.key = (Ax >> 2) & 0x1f
+		self.kdict = (Ax >> 1) & 0x1
+		self.block = Ax & 0x1
+		print(self)
+
+	def __str__(self) -> str:
+		return f"{opcodes[self.opcode][0]}:  req: {self.req} opt: {self.opt} rest: {self.rest} post: {self.post} key: {self.key} kdict: {self.kdict} block: {self.block}"
 
 opcodes = [
 	["OP_NOP", MrbCode],
@@ -115,7 +144,7 @@ opcodes = [
 	["OP_CALL", MrbCodeABC],
 	["OP_SUPER", MrbCodeABC],
 	["OP_ARGARY", MrbCodeABx],
-	["OP_ENTER", MrbCodeAx],
+	["OP_ENTER", MrbCodeAspec],
 	["OP_KARG", MrbCodeABC],
 	["OP_KDICT", MrbCodeABC],
 
