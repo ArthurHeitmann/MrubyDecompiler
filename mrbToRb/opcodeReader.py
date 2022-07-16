@@ -6,6 +6,7 @@ from typing import cast, Tuple
 from mrbParser import RiteLvarRecord, RiteIrepSection
 from mrbToRb.codeGenerator import CodeGen
 from mrbToRb.opCodeFeed import OpCodeFeed
+from mrbToRb.parsingConext import ParsingContext, ParsingState
 from mrbToRb.register import Register
 from mrbToRb.rbExpressions import *
 from opcodes import *
@@ -16,15 +17,19 @@ class OpCodeReader:
     registers: List[Register]
     currentClass: SymbolEx
     parent: OpCodeReader
+    context: ParsingContext
     opcodes: OpCodeFeed
     pool: List[str]
     symbols: List[SymbolEx]
+    irep: RiteIrepSection
+    lvars: RiteLvarRecord
     childIreps: List[RiteIrepSection]
     childLvars: List[RiteLvarRecord]
     localVarsMap: Dict[int, SymbolEx]
     codeGen: CodeGen
 
-    def __init__(self, irep: RiteIrepSection, lvars: RiteLvarRecord, parent: OpCodeReader|None, curClass: SymbolEx, codeGen: CodeGen):
+    def __init__(self, irep: RiteIrepSection, lvars: RiteLvarRecord, parent: OpCodeReader | None, curClass: SymbolEx,
+                 codeGen: CodeGen, context: ParsingContext):
         self.parent = parent
         self.pool = list(map(lambda b: b.decode(ENCODING, "ignore"), irep.pools))
         self.symbols = list(map(lambda s: SymbolEx(0, s), irep.symbols))
@@ -36,9 +41,12 @@ class OpCodeReader:
             self.registers.append(Register(i, self.localVarsMap.get(i, None)))
         self.currentClass = curClass
         self.opcodes = OpCodeFeed(irep.mrbCodes)
+        self.irep = irep
+        self.lvars = lvars
         self.childIreps = irep.childIreps
         self.childLvars = lvars.childLvars
         self.codeGen = codeGen
+        self.context = context
 
     def step(self):
         opcode = self.opcodes.cur()
@@ -102,12 +110,16 @@ class OpCodeReader:
             upVarReg.moveIn(self.registers[opcode.A])
             pushExpToCodeGen(opcode.B, upVarReg.value, context.localVarsMap)
 
-        # elif opcode.opcode == AllOpCodes.OP_JMP:  # end of if
+        # elif opcode.opcode == AllOpCodes.OP_JMP:
         #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_JMPIF:  # start of if or while
-        #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_JMPNOT:
-        #     unhandledOpCode()
+        elif opcode.opcode == AllOpCodes.OP_JMPIF:
+            exp = self.parseOr()
+            self.registers[exp.register].load(exp)
+            pushExpToCodeGen(exp.register, exp)
+        elif opcode.opcode == AllOpCodes.OP_JMPNOT:
+            exp = self.parseAnd()
+            self.registers[exp.register].load(exp)
+            pushExpToCodeGen(exp.register, exp)
         # elif opcode.opcode == AllOpCodes.OP_ONERR:
         #     unhandledOpCode()
         # elif opcode.opcode == AllOpCodes.OP_RESCUE:
@@ -266,7 +278,7 @@ class OpCodeReader:
             if not isinstance(target, ClassSymbolEx) and not isinstance(target, ModuleSymbolEx):
                 unhandledOpCode()
             codeGen = CodeGen()
-            opcodeReader = OpCodeReader(self.childIreps[opcode.Bx], self.childLvars[opcode.Bx], self, target, codeGen)
+            opcodeReader = OpCodeReader(self.childIreps[opcode.Bx], self.childLvars[opcode.Bx], self, target, codeGen, self.context.pushAndNew(ParsingState.NORMAL))
             opcodeReader.parseOps()
             body = BlockEx(0, codeGen.getExpressions())
             if isinstance(target, ClassSymbolEx):
@@ -362,7 +374,7 @@ class OpCodeReader:
                     endPointer = instructionsPointer + jmpEndInstruction.sBx + 1
                     tmpIrep = copy.deepcopy(irep)
                     tmpIrep.mrbCodes = tmpIrep.mrbCodes[startPointer : endPointer]
-                    opcodeReader = OpCodeReader(tmpIrep, lvars, self, parentClass, CodeGen())
+                    opcodeReader = OpCodeReader(tmpIrep, lvars, self, parentClass, CodeGen(), self.context.pushAndNew(ParsingState.METHOD))
                     opcodeReader.parseOps()
                     argVal = opcodeReader.registers[lvars.lvarRecords[lvarIndex].symbolRegister].value
 
@@ -399,8 +411,51 @@ class OpCodeReader:
         # body
         irep.mrbCodes = irep.mrbCodes[methodStartPointer:]
         codeGen = CodeGen()
-        opcodeReader = OpCodeReader(irep, lvars, self, parentClass, codeGen)
+        opcodeReader = OpCodeReader(irep, lvars, self, parentClass, codeGen, self.context.pushAndNew(ParsingState.METHOD))
         opcodeReader.parseOps()
         body = codeGen.getExpressions()
 
         return args, body
+
+    def parseOr(self) -> OrEx:
+        jmpCode = cast(MrbCodeAsBx, self.opcodes.cur())
+        left = self.registers[jmpCode.A].value
+
+        tmpIrep = copy.deepcopy(self.irep)
+        rightStart = self.opcodes.pos + 1
+        rightEnd =  self.opcodes.pos + jmpCode.sBx
+        tmpIrep.mrbCodes = tmpIrep.mrbCodes[rightStart : rightEnd]
+        codeGen = CodeGen()
+        opcodeReader = OpCodeReader(tmpIrep, self.lvars, self.parent, self.currentClass, codeGen, self.context)
+        opcodeReader.parseOps()
+        body = codeGen.getExpressions()
+        if len(body) != 1:
+            raise Exception("Invalid OR body length")
+        right = body[0]
+
+        self.opcodes.seek(rightEnd - 1)
+        reg = jmpCode.A
+        return OrEx(reg, left, right)
+
+    def parseAnd(self):
+        jmpCode = cast(MrbCodeAsBx, self.opcodes.cur())
+        left = self.registers[jmpCode.A].value
+
+        tmpIrep = copy.deepcopy(self.irep)
+        rightStart = self.opcodes.pos + 1
+        rightEnd = self.opcodes.pos + jmpCode.sBx
+        tmpIrep.mrbCodes = tmpIrep.mrbCodes[rightStart: rightEnd]
+        codeGen = CodeGen()
+        opcodeReader = OpCodeReader(tmpIrep, self.lvars, self.parent, self.currentClass, codeGen, self.context)
+        opcodeReader.parseOps()
+        body = codeGen.getExpressions()
+        if len(body) != 1:
+            raise Exception("Invalid OR body length")
+        right = body[0]
+
+        self.opcodes.seek(rightEnd - 1)
+        reg = jmpCode.A
+        return AndEx(reg, left, right)
+
+    def parseWhile(self) -> Expression:
+        ...

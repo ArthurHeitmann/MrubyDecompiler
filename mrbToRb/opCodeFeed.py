@@ -18,6 +18,9 @@ class OpCodeFeed:
     def jump(self, offset: int):
         self.pos += offset
 
+    def seek(self, pos: int):
+        self.pos = pos
+
     def next(self):
         self.pos += 1
 

@@ -543,3 +543,11 @@ class ModuleEx(Expression):
 		start = f"module {self.name}\n"
 		body = prefixLines(str(self.body), "\t")
 		return f"{start}{body}\nend\n"
+
+class AndEx(TwoCombinedExpEx):
+	def __init__(self, register: int, left: Expression, right: Expression):
+		super().__init__(register, left, right, SymbolEx(0, "&&"))
+
+class OrEx(TwoCombinedExpEx):
+	def __init__(self, register: int, left: Expression, right: Expression):
+		super().__init__(register, left, right, SymbolEx(0, "||"))

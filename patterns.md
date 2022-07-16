@@ -46,6 +46,12 @@ for i in 0..5:
 end
 ````
 
+while
+
+START ON: JMP && context != IF
+BODY: JMP + 1 : JMP.sBx
+COND: JMP.sBx : (... code == OP_JMPIF && code.sBx < 0)
+
 ```ruby
 # "OP_LOADI: A: 0x1,	 B: 0xff,	 C: 0x7f,	 Bx: 0x7fff,	 sBx: 0,	 Ax: 0x17fff,	 Bz: 1fff,	 Cz: 3"
 index = 0
@@ -71,6 +77,18 @@ end
 ```
 
 if
+
+START ON: AndEx && AndEx.hasUsages == false && AndEx.right.mrbCodes[-1] != OP_JMP
+COND AndEx.left
+BODY AndEx.right
+
+if-else
+
+START ON: AndEx && AndEx.right.mrbCodes[-1] == OP_JMP
+COND: AndEx.left
+IF BODY: AndEx.right[:-1]
+ELSE BODY: AndEx.left[-1].sBx : AndEx.right[-1].sBx
+
 ````ruby
 # "OP_LOADI: A: 0x1,	 B: 0x100,	 C: 0x3b,	 Bx: 0x803b,	 sBx: 60,	 Ax: 0x1803b,	 Bz: 200e,	 Cz: 3"
 # "OP_LOADI: A: 0x2,	 B: 0x100,	 C: 0x31,	 Bx: 0x8031,	 sBx: 50,	 Ax: 0x28031,	 Bz: 200c,	 Cz: 1"
@@ -85,22 +103,18 @@ if 60 > 50 || 60 < 100  #                                                       
     # "OP_STRING: A: 0x2,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x20000,	 Bz: 0,	 Cz: 0"        |
     # "OP_SEND: A: 0x1,	 B: 0x2,	 C: 0x1,	 Bx: 0x101,	 sBx: -32510,	 Ax: 0x10101,	 Bz: 40,	 Cz: 1"        |
 	puts("biiig")    #                                                                                                 |
-    # "OP_JMP: A: 0x0,	 B: 0x100,	 C: 0x9,	 Bx: 0x8009,	 sBx: 10,	 Ax: 0x8009,	 Bz: 2002,	 Cz: 1"        |
-# "OP_LOADI: A: 0x1,	 B: 0x100,	 C: 0x3b,	 Bx: 0x803b,	 sBx: 60,	 Ax: 0x1803b,	 Bz: 200e,	 Cz: 3"    <---|
-# "OP_LOADI: A: 0x2,	 B: 0x100,	 C: 0x3b,	 Bx: 0x803b,	 sBx: 60,	 Ax: 0x2803b,	 Bz: 200e,	 Cz: 3"
-# "OP_SEND: A: 0x1,	 B: 0x3,	 C: 0x1,	 Bx: 0x181,	 sBx: -32382,	 Ax: 0x10181,	 Bz: 60,	 Cz: 1"
-# "OP_JMPNOT: A: 0x1,	 B: 0x100,	 C: 0x4,	 Bx: 0x8004,	 sBx: 5,	 Ax: 0x18004,	 Bz: 2001,	 Cz: 0"    >-------|
-elsif 60 != 60           #                                                                                                 |
-    # "OP_LOADSELF: A: 0x1,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x10000,	 Bz: 0,	 Cz: 0"            |
-    # "OP_STRING: A: 0x2,	 B: 0x0,	 C: 0x1,	 Bx: 0x1,	 sBx: -32766,	 Ax: 0x20001,	 Bz: 0,	 Cz: 1"            |
-    # "OP_SEND: A: 0x1,	 B: 0x2,	 C: 0x1,	 Bx: 0x101,	 sBx: -32510,	 Ax: 0x10101,	 Bz: 40,	 Cz: 1"            |
-	puts("smol")    #                                                                                                      |
-	# "OP_JMP: A: 0x0,	 B: 0x100,	 C: 0x1,	 Bx: 0x8001,	 sBx: 2,	 Ax: 0x8001,	 Bz: 2000,	 Cz: 1"    >--|    |
-	# "OP_LOADNIL: A: 0x1,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x10000,	 Bz: 0,	 Cz: 0"       | <--|
-end                       #                                                                                           |
-# NEXT                                                                                                             <--|
+    # "OP_JMP: A: 0x0,	 B: 0x100,	 C: 0x9,	 Bx: 0x8009,	 sBx: 10,	 Ax: 0x8009,	 Bz: 2002,	 Cz: 1"    >---|--------|
+# "OP_LOADI: A: 0x1,	 B: 0x100,	 C: 0x3b,	 Bx: 0x803b,	 sBx: 60,	 Ax: 0x1803b,	 Bz: 200e,	 Cz: 3"    <---|        |
+# "OP_LOADI: A: 0x2,	 B: 0x100,	 C: 0x3b,	 Bx: 0x803b,	 sBx: 60,	 Ax: 0x2803b,	 Bz: 200e,	 Cz: 3"                 |
+# "OP_SEND: A: 0x1,	 B: 0x3,	 C: 0x1,	 Bx: 0x181,	 sBx: -32382,	 Ax: 0x10181,	 Bz: 60,	 Cz: 1"                     |
+# "OP_JMPNOT: A: 0x1,	 B: 0x100,	 C: 0x4,	 Bx: 0x8004,	 sBx: 5,	 Ax: 0x18004,	 Bz: 2001,	 Cz: 0"    >-------|    |
+elsif 60 != 60           #                                                                                                 |    |
+    # "OP_LOADSELF: A: 0x1,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x10000,	 Bz: 0,	 Cz: 0"            |    |
+    # "OP_STRING: A: 0x2,	 B: 0x0,	 C: 0x1,	 Bx: 0x1,	 sBx: -32766,	 Ax: 0x20001,	 Bz: 0,	 Cz: 1"            |    |
+    # "OP_SEND: A: 0x1,	 B: 0x2,	 C: 0x1,	 Bx: 0x101,	 sBx: -32510,	 Ax: 0x10101,	 Bz: 40,	 Cz: 1"            |    |
+	puts("smol")    #                                                                                                      |    |
+	# "OP_JMP: A: 0x0,	 B: 0x100,	 C: 0x1,	 Bx: 0x8001,	 sBx: 2,	 Ax: 0x8001,	 Bz: 2000,	 Cz: 1"    >--|    |    |
+	# "OP_LOADNIL: A: 0x1,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x10000,	 Bz: 0,	 Cz: 0"       | <--|    |
+end                       #                                                                                           |         |
+# NEXT                                                                                                             <--|---------|
 ````
-
-
-
-
