@@ -44,9 +44,11 @@ class OpCodeReader:
         opcode = self.opcodes.cur()
         # self.codeGen.pushExp(LineCommentEx(0, str(opcode)))
 
-        def pushExpToCodeGen(regI: int, expression: Expression):
-            if regI in self.localVarsMap:
-                self.codeGen.pushExp(AssignmentEx(regI, self.localVarsMap[regI], expression))
+        def pushExpToCodeGen(regI: int, expression: Expression, localVarsMap: Dict = None):
+            if not localVarsMap:
+                localVarsMap = self.localVarsMap
+            if regI in localVarsMap:
+                self.codeGen.pushExp(AssignmentEx(regI, localVarsMap[regI], expression))
             else:
                 self.codeGen.pushExp(expression)
 
@@ -91,11 +93,13 @@ class OpCodeReader:
         elif opcode.opcode == AllOpCodes.OP_SETMCNST:
             unhandledOpCode()
         elif opcode.opcode == AllOpCodes.OP_GETUPVAR:
-            upVar = self.findUpVar(opcode.B)        # TODO check
+            upVar, _ = self.findUpVar(opcode.B)
             self.registers[opcode.A].moveIn(upVar)
             pushExpToCodeGen(opcode.A, upVar.value)
         elif opcode.opcode == AllOpCodes.OP_SETUPVAR:
-            unhandledOpCode()   # TODO
+            upVarReg, context = self.findUpVar(opcode.B)
+            upVarReg.moveIn(self.registers[opcode.A])
+            pushExpToCodeGen(opcode.B, upVarReg.value, context.localVarsMap)
 
         # elif opcode.opcode == AllOpCodes.OP_JMP:  # end of if
         #     unhandledOpCode()
@@ -313,11 +317,11 @@ class OpCodeReader:
         while self.opcodes.hasNext():
             self.step()
 
-    def findUpVar(self, register: int, checkSelf = False) -> Register:
-        if checkSelf:
+    def findUpVar(self, register: int, _checkSelf = False) -> Tuple[Register, OpCodeReader]:
+        if _checkSelf:
             for regI in self.localVarsMap.keys():
                 if regI == register:
-                    return self.registers[regI]
+                    return self.registers[regI], self
         if self.parent is not None:
             return self.parent.findUpVar(register, True)
         raise Exception("Could not find upvar for register " + str(register))
@@ -328,46 +332,66 @@ class OpCodeReader:
         opcode = cast(MrbCodeABzCz, self.opcodes.cur())
         irep = self.childIreps[opcode.Bz]
         lvars = self.childLvars[opcode.Bz]
-        methodStartPointer = 1
+        methodStartPointer = 0
 
         # args
         lvarIndex = 0
         enterOpcode = cast(MrbCodeAspec, irep.mrbCodes[0])
-        for i in range(enterOpcode.req):
-            argReg = lvars.lvarRecords[lvarIndex].symbolRegister
-            argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
-            args.append(MethodArgumentEx(argReg, argSym))
-            lvarIndex += 1
-        instructionsPointer = 1
-        for i in range(enterOpcode.opt):
-            argReg = lvars.lvarRecords[lvarIndex].symbolRegister
-            argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
+        # has args?
+        if enterOpcode.opcode == AllOpCodes.OP_ENTER:
+            # not a for loop?
+            if not (enterOpcode.Ax == 0x40000 and len(lvars.lvarRecords) == 0):
+                methodStartPointer = 1
+                for i in range(enterOpcode.req):
+                    argReg = lvars.lvarRecords[lvarIndex].symbolRegister
+                    argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
+                    args.append(MethodArgumentEx(argReg, argSym))
+                    lvarIndex += 1
+                instructionsPointer = 1
+                for i in range(enterOpcode.opt):
+                    argReg = lvars.lvarRecords[lvarIndex].symbolRegister
+                    argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
 
-            jmpStartInstruction = cast(MrbCodeAsBx, irep.mrbCodes[i + 1])
-            jmpEndInstruction = cast(MrbCodeAsBx, irep.mrbCodes[i + 2])
-            methodStartPointer = instructionsPointer + jmpEndInstruction.sBx + 1
-            startPointer = instructionsPointer + jmpStartInstruction.sBx
-            endPointer = instructionsPointer + jmpEndInstruction.sBx + 1
-            tmpIrep = copy.deepcopy(irep)
-            tmpIrep.mrbCodes = tmpIrep.mrbCodes[startPointer : endPointer]
-            opcodeReader = OpCodeReader(tmpIrep, lvars, self, parentClass, CodeGen())
-            opcodeReader.parseOps()
-            argVal = opcodeReader.registers[lvars.lvarRecords[lvarIndex].symbolRegister].value
+                    jmpStartInstruction = cast(MrbCodeAsBx, irep.mrbCodes[i + 1])
+                    jmpEndInstruction = cast(MrbCodeAsBx, irep.mrbCodes[i + 2])
+                    methodStartPointer = instructionsPointer + jmpEndInstruction.sBx + 1
+                    startPointer = instructionsPointer + jmpStartInstruction.sBx
+                    endPointer = instructionsPointer + jmpEndInstruction.sBx + 1
+                    tmpIrep = copy.deepcopy(irep)
+                    tmpIrep.mrbCodes = tmpIrep.mrbCodes[startPointer : endPointer]
+                    opcodeReader = OpCodeReader(tmpIrep, lvars, self, parentClass, CodeGen())
+                    opcodeReader.parseOps()
+                    argVal = opcodeReader.registers[lvars.lvarRecords[lvarIndex].symbolRegister].value
 
-            args.append(MethodArgumentEx(argReg, argSym, argVal))
+                    args.append(MethodArgumentEx(argReg, argSym, argVal))
 
-            instructionsPointer += 1
-            lvarIndex += 1
-        if enterOpcode.rest:
-            argReg = lvars.lvarRecords[lvarIndex].symbolRegister
-            argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
-            args.append(MethodArgumentEx(argReg, argSym, None, "*"))
-            lvarIndex += 1
-        if enterOpcode.block:
-            argReg = lvars.lvarRecords[lvarIndex].symbolRegister
-            argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
-            args.append(MethodArgumentEx(argReg, argSym, None, "&"))
-            lvarIndex += 1
+                    instructionsPointer += 1
+                    lvarIndex += 1
+                if enterOpcode.rest:
+                    argReg = lvars.lvarRecords[lvarIndex].symbolRegister
+                    argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
+                    args.append(MethodArgumentEx(argReg, argSym, None, "*"))
+                    lvarIndex += 1
+                if enterOpcode.block:
+                    argReg = lvars.lvarRecords[lvarIndex].symbolRegister
+                    argSym = SymbolEx(0, lvars.lvarRecords[lvarIndex].symbol)
+                    args.append(MethodArgumentEx(argReg, argSym, None, "&"))
+                    lvarIndex += 1
+            else:
+                # for loop
+                methodStartPointer = 1
+                if irep.mrbCodes[1].opcode != AllOpCodes.OP_AREF:
+                    raise Exception("Invalid for loop args")
+                argI = 0
+                while irep.mrbCodes[argI*2 + 1].opcode == AllOpCodes.OP_AREF:
+                    setUpVar = cast(MrbCodeABC, irep.mrbCodes[argI*2 + 2])
+                    upVarReg, _ = self.findUpVar(setUpVar.B, True)
+                    argReg = upVarReg.i
+                    argSym = cast(SymbolEx, upVarReg.value)
+                    args.append(MethodArgumentEx(argReg, argSym))
+
+                    argI += 1
+                    methodStartPointer += 2
 
         # body
         irep.mrbCodes = irep.mrbCodes[methodStartPointer:]

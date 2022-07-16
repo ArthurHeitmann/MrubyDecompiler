@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Any
 
 from mrbToRb.rbExpressions import Expression, SymbolEx, NilEx
 
@@ -8,7 +7,7 @@ class Register:
 	i: int
 	regSymbol: SymbolEx
 	value: Expression
-	lvarSymbol: SymbolEx
+	lvarSymbol: SymbolEx|None
 
 	def __init__(self, i: int, lvarName: str = None):
 		self.i = i

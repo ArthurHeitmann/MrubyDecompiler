@@ -85,6 +85,7 @@ class MrbCodeABzCz(MrbCode):
 
 class MrbCodeAspec(MrbCode):
 	# Aw:Bw:Cw:Dw:Ew:Fw:Gw:OP = 2:5:5:1:5:5:1:1:7
+	Ax: int
 	req: int
 	opt: int
 	rest: int
@@ -95,14 +96,14 @@ class MrbCodeAspec(MrbCode):
 
 	def __init__(self, mrbCode: int) -> None:
 		super().__init__(mrbCode)
-		Ax = (mrbCode >> 7) & 0x1ffffff
-		self.req = (Ax >> 18) & 0x1f
-		self.opt = (Ax >> 13) & 0x1f
-		self.rest = (Ax >> 12) & 0x1
-		self.post = (Ax >> 7) & 0x1f
-		self.key = (Ax >> 2) & 0x1f
-		self.kdict = (Ax >> 1) & 0x1
-		self.block = Ax & 0x1
+		self.Ax = (mrbCode >> 7) & 0x1ffffff
+		self.req = (self.Ax >> 18) & 0x1f
+		self.opt = (self.Ax >> 13) & 0x1f
+		self.rest = (self.Ax >> 12) & 0x1
+		self.post = (self.Ax >> 7) & 0x1f
+		self.key = (self.Ax >> 2) & 0x1f
+		self.kdict = (self.Ax >> 1) & 0x1
+		self.block = self.Ax & 0x1
 
 	def __str__(self) -> str:
 		return f"{opcodes[self.opcode][0]}:  req: {self.req} opt: {self.opt} rest: {self.rest} post: {self.post} key: {self.key} kdict: {self.kdict} block: {self.block}"

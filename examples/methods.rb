@@ -33,3 +33,15 @@ end
 
 offset = 2
 (1..3).each { |i| puts i + offset }
+(1..3).each { puts }
+(1...3).each do |i| puts "YEP#{i}" end
+(1...3).each do puts end
+
+myHash = { "a" => 1, :b => 2, "c" => 3 }
+
+for k, v in myHash
+  puts "#{k} => #{v + offset}"
+  offset += 1
+end
+
+myHash.each { |k, v| puts "#{k} => #{v + offset}" }

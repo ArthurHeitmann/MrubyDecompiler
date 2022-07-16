@@ -364,13 +364,13 @@ class HashEx(Expression):
 		elif len(self.hash) == 1:
 			return f"{{ {list(self.hash.keys())[0]}: {list(self.hash.values())[0]} }}"
 		else:
-			result = "{\n"
+			lines = []
 			for key, value in self.hash.items():
 				if re.match(r"^\d", str(key)):
 					key = f"\"{key}\""
-				result += f": {key} => {value},\n"
-			result += "}"
-			return result
+				lines.append(f"\t{key} => {value},")
+			newLine = "\n"
+			return f"{{\n{newLine.join(lines)}\n}}"
 
 class RangeEx(TwoExpEx):
 	min: Expression
@@ -571,7 +571,7 @@ class ClassEx(Expression):
 		else:
 			start = f"class {self.name}\n"
 		body = prefixLines(str(self.body), "\t")
-		return f"{start}{body}\nend"
+		return f"{start}{body}\nend\n"
 
 class ModuleEx(Expression):
 	name: ModuleSymbolEx
@@ -587,4 +587,4 @@ class ModuleEx(Expression):
 	def _toStr(self):
 		start = f"module {self.name}\n"
 		body = prefixLines(str(self.body), "\t")
-		return f"{start}{body}\nend"
+		return f"{start}{body}\nend\n\n"

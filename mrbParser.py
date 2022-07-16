@@ -130,7 +130,7 @@ class RiteIrepSection:
 		self.poolLen = read_uint32(file)
 		self.pools = []
 		for i in range(self.poolLen):
-			tt = read_uint8(file)
+			read_uint8(file)	# tt
 			poolDataLen = read_uint16(file)
 			self.pools.append(file.read(poolDataLen))
 		
