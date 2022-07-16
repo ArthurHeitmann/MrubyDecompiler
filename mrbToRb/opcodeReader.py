@@ -58,8 +58,9 @@ class OpCodeReader:
         if opcode.opcode == AllOpCodes.OP_NOP:
             return
         elif opcode.opcode == AllOpCodes.OP_MOVE:
+            val = self.registers[opcode.B].value
             self.registers[opcode.A].moveIn(self.registers[opcode.B])
-            pushExpToCodeGen(opcode.A, self.registers[opcode.B].value)
+            pushExpToCodeGen(opcode.A, val)
         elif AllOpCodes.OP_LOADL <= opcode.opcode <= AllOpCodes.OP_LOADF:
             value: Expression
             if opcode.opcode == AllOpCodes.OP_LOADL:
@@ -245,8 +246,10 @@ class OpCodeReader:
             self.registers[opcode.A].load(exp)
             pushExpToCodeGen(opcode.A, exp)
 
-        # elif opcode.opcode == AllOpCodes.OP_OCLASS:
-        #     unhandledOpCode()
+        elif opcode.opcode == AllOpCodes.OP_OCLASS:
+            exp = ClassSymbolEx(opcode.A, StringEx(0, "Object"))
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
         elif opcode.opcode == AllOpCodes.OP_CLASS:
             parentClass = self.registers[opcode.A + 1].value
             if isinstance(parentClass, NilEx):

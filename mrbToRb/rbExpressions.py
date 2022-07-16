@@ -200,7 +200,7 @@ AllOperatorsTwoExp: Set[str] = {
 	"?", ":",
 	"=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "&&=", "||=", "**=",
 }
-AllUnanaryOperators: Set[str] = {
+AllUnaryOperators: Set[str] = {
 	"+@", "-@", "~", "!",
 }
 
@@ -216,7 +216,7 @@ class MethodCallEx(Expression):
 		self.srcObj = srcObj
 		self.symbol = symbol
 		self.args = args
-		self.isOperatorCall = str(symbol) in AllOperatorsTwoExp and len(args) == 1 or str(symbol) in AllUnanaryOperators and len(args) == 0
+		self.isOperatorCall = str(symbol) in AllOperatorsTwoExp and len(args) == 1 or str(symbol) in AllUnaryOperators and len(args) == 0
 		self.operatorPriority = OperatorPriority.get(str(symbol), 99)
 		if srcObj is not None:
 			srcObj.hasUsages = True
@@ -237,7 +237,11 @@ class MethodCallEx(Expression):
 					right = f"({self.args[0]})"
 				return f"{left} {self.symbol} {right}"
 			else:
-				return f"{str(self.symbol).replace('@', '')}{self.srcObj}"
+				if isinstance(self.srcObj, SymbolEx) or isinstance(self.srcObj, LiteralEx):
+					right = self.srcObj
+				else:
+					right = f"({self.srcObj})"
+				return f"{str(self.symbol).replace('@', '')}{right}"
 		else:
 			result = ""
 			if self.srcObj is not None and not isinstance(self.srcObj, MainClass):
@@ -322,7 +326,7 @@ class ArraySetEx(Expression):
 
 class StringEx(AnyValueExpression):
 	def _toStr(self):
-		return '"' + str(self.value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+		return '"' + str(self.value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
 
 class StringConcatEx(TwoExpEx):
 	def _toStr(self):
@@ -391,58 +395,9 @@ class RangeEx(TwoExpEx):
 		else:
 			return f"{self.min}..{self.max}"
 
-# class ClassEx(BlockEx):
-# 	className: SymbolEx
-# 	parentClass: Expression|None
-#
-# 	def __init__(self, register: int, className: SymbolEx, parentClass: Expression|None):
-# 		super().__init__(register)
-# 		self.className = className
-# 		self.parentClass = parentClass
-# 		self.canBeOptimizedAway = False
-#
-# 	def _toStr(self):
-# 		if self.parentClass is None or isinstance(self.parentClass, MainClass):
-# 			result = f"class {self.className}\n"
-# 		else:
-# 			result = f"class {self.className} < {self.parentClass}\n"
-#
-# 		result += super()._toStr()
-# 		result += "\nend"
-# 		return result
-
 class MainClass(SymbolEx):
 	def __init__(self, register: int):
 		super().__init__(register, SymbolEx(0, "main"))
-
-# class SingletonClassEx(BlockEx):
-# 	object: Expression
-#
-# 	def __init__(self, register: int, obj: Expression):
-# 		super().__init__(register)
-# 		self.object = obj
-# 		self.canBeOptimizedAway = False
-# 		self.object.hasUsages = True
-#
-# 	def _toStr(self):
-# 		result = f"class << {self.object}\n"
-# 		result += super()._toStr()
-# 		result += "\nend"
-# 		return result
-#
-# class Module(BlockEx):
-# 	name: SymbolEx
-#
-# 	def __init__(self, register: int, name: SymbolEx):
-# 		super().__init__(register)
-# 		self.name = name
-# 		self.canBeOptimizedAway = False
-#
-# 	def _toStr(self):
-# 		result = f"module {self.name}\n"
-# 		result += super()._toStr()
-# 		result += "\nend"
-# 		return result
 
 class StatementEx(AnyValueExpression):
 	def __init__(self, register: int, value: str):
@@ -587,4 +542,4 @@ class ModuleEx(Expression):
 	def _toStr(self):
 		start = f"module {self.name}\n"
 		body = prefixLines(str(self.body), "\t")
-		return f"{start}{body}\nend\n\n"
+		return f"{start}{body}\nend\n"

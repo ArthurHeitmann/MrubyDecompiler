@@ -1,11 +1,16 @@
+import sys
+
 from mrbParser import RiteFile
 from mrbToRb.mrbToRb import mrbToRb
 
-file = "./examples/methods.mrb"
-# file = "D:\\delete\\mods\\na\\blender\\extracted\\data002.cpk_unpacked\\ph1\\nier2blender_extracted\\p100.dat\\p100_56f39801_scp.bin"
+file = sys.argv[1] if len(sys.argv) >= 2 else "./examples/classes.mrb"
+outfile = sys.argv[2] if len(sys.argv) >= 3 else file + ".rb"
 
 
 with open(file, "rb") as f:
     riteFile = RiteFile(f)
     codesRes = mrbToRb(riteFile)
-    print(codesRes.toStr())
+    # print(codesRes.toStr())
+with open(outfile, "wb") as f:
+    f.write(codesRes.toStr().encode("utf-8", "ignore"))
+
