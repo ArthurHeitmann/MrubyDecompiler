@@ -114,7 +114,7 @@ elsif 60 != 60           #                                                      
     # "OP_SEND: A: 0x1,	 B: 0x2,	 C: 0x1,	 Bx: 0x101,	 sBx: -32510,	 Ax: 0x10101,	 Bz: 40,	 Cz: 1"            |    |
 	puts("smol")    #                                                                                                      |    |
 	# "OP_JMP: A: 0x0,	 B: 0x100,	 C: 0x1,	 Bx: 0x8001,	 sBx: 2,	 Ax: 0x8001,	 Bz: 2000,	 Cz: 1"    >--|    |    |
-	# "OP_LOADNIL: A: 0x1,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x10000,	 Bz: 0,	 Cz: 0"       | <--|    |
+	# "OP_LOADNIL: A: 0x1,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x10000,	 Bz: 0,	 Cz: 0"  <----|----|    |
 end                       #                                                                                           |         |
-# NEXT                                                                                                             <--|---------|
+# NEXT                                                                                                             <------------|
 ````

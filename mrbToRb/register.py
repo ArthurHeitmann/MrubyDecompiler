@@ -38,4 +38,14 @@ class Register:
 	def value(self) -> Expression:
 		if self.tmpLvarSymbol:
 			return self.tmpLvarSymbol
-		return self._value
+		else:
+			return self._value
+
+	@property
+	def valueOrSymbol(self) -> Expression:
+		if self.lvarSymbol:
+			return self.lvarSymbol
+		elif self.tmpLvarSymbol:
+			return self.tmpLvarSymbol
+		else:
+			return self._value

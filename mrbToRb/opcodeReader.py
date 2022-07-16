@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import cast, Tuple
+from typing import cast, Tuple, Type
 
 from mrbParser import RiteLvarRecord, RiteIrepSection
 from mrbToRb.codeGenerator import CodeGen
@@ -113,13 +113,9 @@ class OpCodeReader:
         # elif opcode.opcode == AllOpCodes.OP_JMP:
         #     unhandledOpCode()
         elif opcode.opcode == AllOpCodes.OP_JMPIF:
-            exp = self.parseOr()
-            self.registers[exp.register].load(exp)
-            pushExpToCodeGen(exp.register, exp)
+            self.parseAndOrOr(opcode, OrEx)
         elif opcode.opcode == AllOpCodes.OP_JMPNOT:
-            exp = self.parseAnd()
-            self.registers[exp.register].load(exp)
-            pushExpToCodeGen(exp.register, exp)
+            self.parseJMPNOT()
         # elif opcode.opcode == AllOpCodes.OP_ONERR:
         #     unhandledOpCode()
         # elif opcode.opcode == AllOpCodes.OP_RESCUE:
@@ -142,7 +138,7 @@ class OpCodeReader:
             exp = MethodCallEx(opcode.A, srcObj, self.symbols[opcode.B], args)
             self.registers[opcode.A].load(exp)
             pushExpToCodeGen(opcode.A, exp)
-        elif opcode.opcode == AllOpCodes.OP_SENDB:      # TODO check
+        elif opcode.opcode == AllOpCodes.OP_SENDB:
             args = [reg.value for reg in self.registers[opcode.A + 1: opcode.A + 1 + opcode.C]]
             block = cast(LambdaEx, self.registers[opcode.A + opcode.C + 1].value)
             exp = MethodCallWithBlockEx(opcode.A, self.registers[opcode.A].value, self.symbols[opcode.B], args, block)
@@ -157,8 +153,7 @@ class OpCodeReader:
         # elif opcode.opcode == AllOpCodes.OP_ARGARY:
         #     unhandledOpCode()
         # elif opcode.opcode == AllOpCodes.OP_ENTER:
-        #     # TODO
-        #     pass
+        #     unhandledOpCode()
         # elif opcode.opcode == AllOpCodes.OP_KARG:
         #     unhandledOpCode()
         # elif opcode.opcode == AllOpCodes.OP_KDICT:
@@ -417,45 +412,65 @@ class OpCodeReader:
 
         return args, body
 
-    def parseOr(self) -> OrEx:
-        jmpCode = cast(MrbCodeAsBx, self.opcodes.cur())
-        left = self.registers[jmpCode.A].value
-
+    def parseSection(self, start: int, end: int, newContext: ParsingContext|None = None) -> CodeGen:
         tmpIrep = copy.deepcopy(self.irep)
+        tmpIrep.mrbCodes = tmpIrep.mrbCodes[start : end]
+        codeGen = CodeGen()
+        opcodeReader = OpCodeReader(tmpIrep, self.lvars, self.parent, self.currentClass, codeGen, newContext or self.context)
+        opcodeReader.parseOps()
+        return codeGen
+
+    def parseAndOrOr(self, jmpCode: MrbCodeAsBx, expClass: Type[AndEx|OrEx]):
+        left = self.registers[jmpCode.A].valueOrSymbol
         rightStart = self.opcodes.pos + 1
         rightEnd =  self.opcodes.pos + jmpCode.sBx
-        tmpIrep.mrbCodes = tmpIrep.mrbCodes[rightStart : rightEnd]
-        codeGen = CodeGen()
-        opcodeReader = OpCodeReader(tmpIrep, self.lvars, self.parent, self.currentClass, codeGen, self.context)
-        opcodeReader.parseOps()
-        body = codeGen.getExpressions()
+        innerContext = self.context.pushAndNew(ParsingState.IF)
+        body = self.parseSection(rightStart, rightEnd, innerContext).getExpressions()
+        if len(body) > 1 and expClass == AndEx:
+            # is actually and If block
+            self.pushIf(left, BlockEx(0, body))
+            self.opcodes.seek(rightEnd - 1)
+            return
         if len(body) != 1:
-            raise Exception("Invalid OR body length")
+            raise Exception("Invalid OR/AND body length")
+
+        reg = jmpCode.A
         right = body[0]
+        exp = expClass(reg, left, right)
+
+        self.registers[exp.register].load(exp)
+        if reg in self.localVarsMap:
+            self.codeGen.pushExp(AssignmentEx(reg, self.localVarsMap[reg], exp))
+        else:
+            self.codeGen.pushExp(exp)
 
         self.opcodes.seek(rightEnd - 1)
-        reg = jmpCode.A
-        return OrEx(reg, left, right)
 
-    def parseAnd(self):
+    def parseJMPNOT(self):
         jmpCode = cast(MrbCodeAsBx, self.opcodes.cur())
-        left = self.registers[jmpCode.A].value
+        andEnd = self.opcodes.pos + jmpCode.sBx
+        ifEndCode = self.opcodes[andEnd - 1]
+        if ifEndCode.opcode == AllOpCodes.OP_JMP:
+            self.parseIfElse(jmpCode, andEnd + ifEndCode.sBx - 1)
+        else:
+            self.parseAndOrOr(jmpCode, AndEx)
 
-        tmpIrep = copy.deepcopy(self.irep)
-        rightStart = self.opcodes.pos + 1
-        rightEnd = self.opcodes.pos + jmpCode.sBx
-        tmpIrep.mrbCodes = tmpIrep.mrbCodes[rightStart: rightEnd]
-        codeGen = CodeGen()
-        opcodeReader = OpCodeReader(tmpIrep, self.lvars, self.parent, self.currentClass, codeGen, self.context)
-        opcodeReader.parseOps()
-        body = codeGen.getExpressions()
-        if len(body) != 1:
-            raise Exception("Invalid OR body length")
-        right = body[0]
+    def parseIfElse(self, jmpCode: MrbCodeAsBx, elseEnd: int):
+        ifStart = self.opcodes.pos + 1
+        ifEnd = self.opcodes.pos + jmpCode.sBx - 1
+        elseStart = self.opcodes.pos + jmpCode.sBx
 
-        self.opcodes.seek(rightEnd - 1)
-        reg = jmpCode.A
-        return AndEx(reg, left, right)
+        condition = self.registers[jmpCode.A].valueOrSymbol
+        innerContext = self.context.pushAndNew(ParsingState.IF)
+        ifBody = self.parseSection(ifStart, ifEnd, innerContext).getExpressions()
+        elseBody = self.parseSection(elseStart, elseEnd, innerContext).getExpressions()
+
+        self.pushIf(condition, BlockEx(0, ifBody), BlockEx(0, elseBody))
+        self.opcodes.seek(elseEnd - 1)
+
+    def pushIf(self, condition: Expression, ifBlock: BlockEx, elseBlock: BlockEx|None = None):
+        exp = IfEx(0, condition, ifBlock, elseBlock)
+        self.codeGen.pushExp(exp)
 
     def parseWhile(self) -> Expression:
         ...
