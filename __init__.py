@@ -4,7 +4,7 @@ import time
 from mrbParser import RiteFile
 from mrbToRb.mrbToRb import mrbToRb
 
-file = sys.argv[1] if len(sys.argv) >= 2 else "./examples/if.mrb"
+file = sys.argv[1] if len(sys.argv) >= 2 else "./examples/varAssign.mrb"
 outfile = sys.argv[2] if len(sys.argv) >= 3 else file + ".rb"
 
 t1 = time.time()

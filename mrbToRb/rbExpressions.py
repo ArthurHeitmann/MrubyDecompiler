@@ -575,3 +575,7 @@ class IfEx(Expression):
 		else:
 			elseBlock = prefixLines(str(self.elseBlock), "\t")
 			return f"if {self.condition}\n{ifBlock}\nelse\n{elseBlock}\nend"
+
+class MConstSymbolEx(TwoExpEx):
+	def _toStr(self):
+		return f"{self.left}::{self.right}"

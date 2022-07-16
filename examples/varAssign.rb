@@ -17,6 +17,8 @@ myInt1 += 12
 myInt2 += (myInt1 ** 2 / 2) ** 1
 myInt1 = (myInt1 * 3) + 4
 concatStr = "C: #{myInt1} #{myInt2} #{myStr}"
+MyMod::SomeConst = 42
 puts
 puts concatStr
+puts MyMod::SomeConst
 

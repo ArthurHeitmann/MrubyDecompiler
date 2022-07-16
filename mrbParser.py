@@ -177,14 +177,15 @@ class RiteLvarRecord:
 	lvarRecords: List[RiteLvar]
 	childLvars: List[RiteLvarRecord]
 
-	def __init__(self, file: BinaryIO, irepSection: RiteIrepSection, symbols: List[str]) -> None:
+	def __init__(self, file: BinaryIO|None, irepSection: RiteIrepSection, symbols: List[str]) -> None:
 		self.lvarRecords = []
-		for i in range(irepSection.numLocalVariables - 1):
-			self.lvarRecords.append(RiteLvar(file, symbols))
-		
 		self.childLvars = []
-		for i in range(irepSection.numChildIreps):
-			self.childLvars.append(RiteLvarRecord(file, irepSection.childIreps[i], symbols))
+		if file is not None:
+			for i in range(irepSection.numLocalVariables - 1):
+				self.lvarRecords.append(RiteLvar(file, symbols))
+
+			for i in range(irepSection.numChildIreps):
+				self.childLvars.append(RiteLvarRecord(file, irepSection.childIreps[i], symbols))
 
 class RiteIrepBlock:
 	"""
@@ -215,17 +216,21 @@ class RiteLvarBlock:
 		LvarRecord record(irepSection);
 	};
 	"""
-	header: RiteSectionHeader
+	header: RiteSectionHeader|None
 	section: RiteLvarRecord
 	
-	def __init__(self, file: BinaryIO, irepSection: RiteIrepSection) -> None:
-		self.header = RiteSectionHeader(file)
-		symbolsLen = read_uint32(file)
-		self.symbols = []
-		for i in range(symbolsLen):
-			strLen = read_uint16(file)
-			self.symbols.append(read_string(file, strLen))
-		self.section = RiteLvarRecord(file, irepSection, self.symbols)
+	def __init__(self, file: BinaryIO|None, irepSection: RiteIrepSection) -> None:
+		if file is not None:
+			self.header = RiteSectionHeader(file)
+			symbolsLen = read_uint32(file)
+			symbols = []
+			for i in range(symbolsLen):
+				strLen = read_uint16(file)
+				symbols.append(read_string(file, strLen))
+			self.section = RiteLvarRecord(file, irepSection, symbols)
+		else:
+			self.header = None
+			self.section = RiteLvarRecord(None, irepSection, [])
 
 class RiteFooter:
 	"""
@@ -250,6 +255,12 @@ class RiteFile:
 
 	def __init__(self, file: BinaryIO) -> None:
 		self.header = RiteBinaryHeader(file)
+		remainingSize = self.header.binarySize - 0x16
+		size1 = file.tell()
 		self.irepBlock = RiteIrepBlock(file)
-		self.lvarBlock = RiteLvarBlock(file, self.irepBlock.section)
+		remainingSize -= file.tell() - size1
+		if remainingSize > 0x8:
+			self.lvarBlock = RiteLvarBlock(file, self.irepBlock.section)
+		else:
+			self.lvarBlock = RiteLvarBlock(None, self.irepBlock.section)
 		self.footer = RiteFooter(file)

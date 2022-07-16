@@ -98,9 +98,13 @@ class OpCodeReader:
             exp = AssignmentEx(opcode.A, SymbolEx(opcode.A, self.symbols[opcode.Bx]), self.registers[opcode.A].value)
             self.codeGen.pushExp(exp)
         elif opcode.opcode == AllOpCodes.OP_GETMCNST:
-            unhandledOpCode()
+            exp = MConstSymbolEx(opcode.A, self.registers[opcode.A].value, self.symbols[opcode.Bx])
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
         elif opcode.opcode == AllOpCodes.OP_SETMCNST:
-            unhandledOpCode()
+            mConstExp = MConstSymbolEx(opcode.A, self.registers[opcode.A + 1].value, self.symbols[opcode.Bx])
+            exp = AssignmentEx(opcode.A + 1, mConstExp, self.registers[opcode.A].value)
+            self.codeGen.pushExp(exp)
         elif opcode.opcode == AllOpCodes.OP_GETUPVAR:
             upVar, _ = self.findUpVar(opcode.B)
             self.registers[opcode.A].moveIn(upVar)
