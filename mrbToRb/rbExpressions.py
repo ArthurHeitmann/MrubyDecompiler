@@ -552,17 +552,16 @@ class OrEx(TwoCombinedExpEx):
 	def __init__(self, register: int, left: Expression, right: Expression):
 		super().__init__(register, left, right, SymbolEx(0, "||"))
 
-class IfEx(Expression):
+class IfEx(StatementEx):
 	condition: Expression
 	ifBlock: BlockEx
 	elseBlock: BlockEx|None
 
 	def __init__(self, register: int, condition: Expression, ifBlock: BlockEx, elseBlock: BlockEx|None = None):
-		super().__init__(register)
+		super().__init__(register, "if")
 		self.condition = condition
 		self.ifBlock = ifBlock
 		self.elseBlock = elseBlock
-		self.canBeOptimizedAway = False
 		condition.hasUsages = True
 		ifBlock.hasUsages = True
 		if elseBlock is not None:
@@ -579,3 +578,62 @@ class IfEx(Expression):
 class MConstSymbolEx(TwoExpEx):
 	def _toStr(self):
 		return f"{self.left}::{self.right}"
+
+class WhileEx(StatementEx):
+	condition: Expression
+	body: BlockEx
+
+	def __init__(self, register: int, condition: Expression, body: BlockEx):
+		super().__init__(register, "while")
+		self.condition = condition
+		self.body = body
+		condition.hasUsages = True
+		body.hasUsages = True
+
+	def _toStr(self):
+		body = prefixLines(str(self.body), "\t")
+		return f"while {self.condition}\n{body}\nend"
+
+class CaseWhenEx(StatementEx):
+	conditions: List[Expression]
+	body: BlockEx
+
+	def __init__(self, conditions: List[Expression], body: BlockEx):
+		super().__init__(0, "case")
+		self.conditions = conditions[:]
+		self.body = body
+		for cond in conditions:
+			cond.hasUsages = True
+		body.hasUsages = True
+
+	def _toStr(self):
+		cond = "when " + ", ".join(map(str, self.conditions))
+		body = prefixLines(str(self.body), "\t")
+		return f"{cond}\n{body}"
+
+class CaseEx(Expression):
+	caseExp: Expression|None
+	whenBlocks: List[CaseWhenEx]
+	elseBlock: BlockEx|None
+
+	def __init__(self, register: int, caseExp: Expression|None, whenBlocks: List[CaseWhenEx], elseBlock: BlockEx|None):
+		super().__init__(register)
+		self.caseExp = caseExp
+		self.whenBlocks = whenBlocks
+		self.elseBlock = elseBlock
+		for whenBlock in whenBlocks:
+			whenBlock.hasUsages = True
+		if elseBlock is not None:
+			elseBlock.hasUsages = True
+
+	def _toStr(self):
+		if self.caseExp is None:
+			start = "case"
+		else:
+			start = f"case {self.caseExp}"
+		whenBlocks = "\n".join(map(str, self.whenBlocks))
+		if self.elseBlock is None:
+			return f"\n{start}\n{whenBlocks}\nend\n"
+		else:
+			elseBlock = prefixLines(str(self.elseBlock), "\t")
+			return f"\n{start}\n{whenBlocks}\nelse\n{elseBlock}\nend\n"

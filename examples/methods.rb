@@ -39,6 +39,9 @@ offset = 2
 
 myHash = { "a" => 1, :b => 2, "c" => 3 }
 
+for i in 1..5
+  puts i
+end
 for k, v in myHash
   puts "#{k} => #{v + offset}"
   offset += 1

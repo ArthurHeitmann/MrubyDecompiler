@@ -29,7 +29,7 @@ function_name(1, 3)
 ```
 
 for
-````ruby
+```ruby
 # "OP_LOADI: A: 0x4,	 B: 0xff,	 C: 0x7f,	 Bx: 0x7fff,	 sBx: 0,	 Ax: 0x47fff,	 Bz: 1fff,	 Cz: 3"
 # "OP_LOADI: A: 0x5,	 B: 0x100,	 C: 0x4,	 Bx: 0x8004,	 sBx: 5,	 Ax: 0x58004,	 Bz: 2001,	 Cz: 0"
 # "OP_RANGE: A: 0x4,	 B: 0x4,	 C: 0x0,	 Bx: 0x200,	 sBx: -32255,	 Ax: 0x40200,	 Bz: 80,	 Cz: 0"
@@ -44,11 +44,11 @@ for i in 0..5:
     ...
     # "OP_RETURN: A: 0x2,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x20000,	 Bz: 0,	 Cz: 0"
 end
-````
+```
 
 while
 
-START ON: JMP && context != IF
+START ON: JMP
 BODY: JMP + 1 : JMP.sBx
 COND: JMP.sBx : (... code == OP_JMPIF && code.sBx < 0)
 
@@ -89,7 +89,7 @@ COND: AndEx.left
 IF BODY: AndEx.right[:-1]
 ELSE BODY: AndEx.left[-1].sBx : AndEx.right[-1].sBx
 
-````ruby
+```ruby
 # "OP_LOADI: A: 0x1,	 B: 0x100,	 C: 0x3b,	 Bx: 0x803b,	 sBx: 60,	 Ax: 0x1803b,	 Bz: 200e,	 Cz: 3"
 # "OP_LOADI: A: 0x2,	 B: 0x100,	 C: 0x31,	 Bx: 0x8031,	 sBx: 50,	 Ax: 0x28031,	 Bz: 200c,	 Cz: 1"
 # "OP_GT: A: 0x1,	 B: 0x0,	 C: 0x1,	 Bx: 0x1,	 sBx: -32766,	 Ax: 0x10001,	 Bz: 0,	 Cz: 1"
@@ -114,7 +114,7 @@ elsif 60 != 60           #                                                      
     # "OP_SEND: A: 0x1,	 B: 0x2,	 C: 0x1,	 Bx: 0x101,	 sBx: -32510,	 Ax: 0x10101,	 Bz: 40,	 Cz: 1"            |    |
 	puts("smol")    #                                                                                                      |    |
 	# "OP_JMP: A: 0x0,	 B: 0x100,	 C: 0x1,	 Bx: 0x8001,	 sBx: 2,	 Ax: 0x8001,	 Bz: 2000,	 Cz: 1"    >--|    |    |
-	# "OP_LOADNIL: A: 0x1,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x10000,	 Bz: 0,	 Cz: 0"  <----|----|    |
+# "OP_LOADNIL: A: 0x1,	 B: 0x0,	 C: 0x0,	 Bx: 0x0,	 sBx: -32767,	 Ax: 0x10000,	 Bz: 0,	 Cz: 0"      <----|----|    |
 end                       #                                                                                           |         |
 # NEXT                                                                                                             <------------|
-````
+```

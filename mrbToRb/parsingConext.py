@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List
+from typing import List, Callable, Any
 
 
 class ParsingState:
@@ -8,21 +8,31 @@ class ParsingState:
     FOR_LOOP = 2
     WHILE_LOOP = 3
     IF = 4
+    WHEN_COND = 5
 
 class ParsingContext:
     parentStates: List[ParsingState]
+    callback: Callable[..., Any]|None
+    hasMoreOpcodesOutside: bool
 
-    def __init__(self, state: ParsingState, parent: ParsingContext|None = None):
+    def __init__(self, state: ParsingState, parent: ParsingContext|None = None, hasMoreOpcodesOutside: bool = False) -> None:
         if parent:
-            self.parentStates = parent.parentStates + parent.parentStates
+            self.parentStates = parent.parentStates + [state]
         else:
             self.parentStates = [state]
-
-    def isIf(self):
-        return ParsingState.IF in self.parentStates
+        self.callback = None
+        self.hasMoreOpcodesOutside = hasMoreOpcodesOutside
 
     def isMethod(self):
         return ParsingState.METHOD in self.parentStates
+
+    def isIf(self):
+        for state in reversed(self.parentStates):
+            if state == ParsingState.METHOD:
+                return False
+            elif state == ParsingState.IF:
+                return True
+        return False
 
     def isForLoop(self):
         for state in reversed(self.parentStates):
@@ -44,5 +54,8 @@ class ParsingContext:
                 return True
         return False
 
-    def pushAndNew(self, state: ParsingState) -> ParsingContext:
-        return ParsingContext(state, self)
+    def isWhenCond(self):
+        return self.parentStates[-1] == ParsingState.WHEN_COND
+
+    def pushAndNew(self, state: ParsingState, hasMore: bool = False) -> ParsingContext:
+        return ParsingContext(state, self, hasMore)
