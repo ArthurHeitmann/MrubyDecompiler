@@ -637,3 +637,7 @@ class CaseEx(Expression):
 		else:
 			elseBlock = prefixLines(str(self.elseBlock), "\t")
 			return f"\n{start}\n{whenBlocks}\nelse\n{elseBlock}\nend\n"
+
+class BlkPushEx(Expression):
+	def _toStr(self):
+		return "# ERROR! This shouldn't be here! #"

@@ -108,6 +108,23 @@ class MrbCodeAspec(MrbCode):
 	def __str__(self) -> str:
 		return f"{opcodes[self.opcode][0]}:  req: {self.req} opt: {self.opt} rest: {self.rest} post: {self.post} key: {self.key} kdict: {self.kdict} block: {self.block}"
 
+class MrbCodeBlkPush(MrbCodeABx):
+	# A:b1:b2:b3:b4:OP = 9:6:1:5:4:7
+	b1: int
+	b2: int
+	b3: int
+	b4: int
+
+	def __init__(self, mrbCode: int) -> None:
+		super().__init__(mrbCode)
+		self.b1 = (self.Bx >> 10) & 0x3f
+		self.b2 = (self.Bx >> 9) & 0x1
+		self.b3 = (self.Bx >> 4) & 0x1f
+		self.b4 = (self.Bx >> 0) & 0xf
+
+	def __str__(self) -> str:
+		return f"{opcodes[self.opcode][0]}:  b1: {self.b1} b2: {self.b2} b3: {self.b3} b4: {self.b4}"
+
 opcodes = [
 	["OP_NOP", MrbCode],
 	["OP_MOVE", MrbCodeABC],
@@ -156,7 +173,7 @@ opcodes = [
 
 	["OP_RETURN", MrbCodeABC],
 	["OP_TAILCALL", MrbCodeABC],
-	["OP_BLKPUSH", MrbCodeABx],
+	["OP_BLKPUSH", MrbCodeBlkPush],
 
 	["OP_ADD", MrbCodeABC],
 	["OP_ADDI", MrbCodeABC],

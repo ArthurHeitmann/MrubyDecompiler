@@ -144,10 +144,14 @@ class OpCodeReader:
         elif opcode.opcode == AllOpCodes.OP_SEND:
             args = [reg.value for reg in self.registers[opcode.A + 1: opcode.A + 1 + opcode.C]]
             srcObj: Expression|None = self.registers[opcode.A].value
+            methodSymbol = self.symbols[opcode.B]
             if isinstance(srcObj, SelfEx) and isinstance(self.currentClass, MainClass):
                 srcObj.hasUsages = True
                 srcObj = None
-            exp = MethodCallEx(opcode.A, srcObj, self.symbols[opcode.B], args)
+            elif isinstance(srcObj, BlkPushEx) and srcObj.register == opcode.A:
+                srcObj = None
+                methodSymbol = SymbolEx(opcode.A, "yield")
+            exp = MethodCallEx(opcode.A, srcObj, methodSymbol, args)
             self.registers[opcode.A].load(exp)
             pushExpToCodeGen(opcode.A, exp)
         elif opcode.opcode == AllOpCodes.OP_SENDB:
@@ -189,8 +193,9 @@ class OpCodeReader:
                 self.codeGen.pushExp(retStatement)
         # elif opcode.opcode == AllOpCodes.OP_TAILCALL:
         #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_BLKPUSH:
-        #     unhandledOpCode()
+        elif opcode.opcode == AllOpCodes.OP_BLKPUSH:
+            exp = BlkPushEx(opcode.A)
+            self.registers[opcode.A].load(exp)
 
         elif AllOpCodes.OP_ADD <= opcode.opcode <= AllOpCodes.OP_DIV:
             if opcode.opcode in { AllOpCodes.OP_ADD, AllOpCodes.OP_SUB, AllOpCodes.OP_MUL, AllOpCodes.OP_DIV }:
