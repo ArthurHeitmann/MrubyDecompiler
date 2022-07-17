@@ -89,7 +89,7 @@ class AnyValueExpression(Expression):
 
 class LineCommentEx(AnyValueExpression):
 	def _toStr(self):
-		return f"#{self.value}"
+		return f"# {self.value}"
 
 class LiteralEx(AnyValueExpression):
 	def _toStr(self):
@@ -579,12 +579,12 @@ class MConstSymbolEx(TwoExpEx):
 	def _toStr(self):
 		return f"{self.left}::{self.right}"
 
-class WhileEx(StatementEx):
+class WhileOrUntilEx(StatementEx):
 	condition: Expression
 	body: BlockEx
 
-	def __init__(self, register: int, condition: Expression, body: BlockEx):
-		super().__init__(register, "while")
+	def __init__(self, register: int, loopType: str, condition: Expression, body: BlockEx):
+		super().__init__(register, loopType)
 		self.condition = condition
 		self.body = body
 		condition.hasUsages = True
@@ -592,7 +592,7 @@ class WhileEx(StatementEx):
 
 	def _toStr(self):
 		body = prefixLines(str(self.body), "\t")
-		return f"while {self.condition}\n{body}\nend"
+		return f"{self.value} {self.condition}\n{body}\nend"
 
 class CaseWhenEx(StatementEx):
 	conditions: List[Expression]

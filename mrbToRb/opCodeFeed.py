@@ -19,10 +19,15 @@ class OpCodeFeed:
         self.pos += offset
 
     def seek(self, pos: int):
+        if pos < self.pos:
+            raise ValueError("Cannot seek backwards")
         self.pos = pos
 
     def next(self):
         self.pos += 1
+
+    def stop(self):
+        self.pos = len(self.opcodes)
 
     def hasNext(self):
         return self.pos < len(self.opcodes)

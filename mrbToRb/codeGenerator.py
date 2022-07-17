@@ -7,7 +7,7 @@ class CodeGen:
 	expressions: List[Expression]
 	includeComments: bool
 
-	def __init__(self, includeComments: bool = False):
+	def __init__(self, includeComments: bool = True):
 		self.expressions = []
 		self.includeComments = includeComments
 

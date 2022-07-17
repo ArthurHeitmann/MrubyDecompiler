@@ -107,27 +107,23 @@ class OpCodeReader:
             self.codeGen.pushExp(exp)
         elif opcode.opcode == AllOpCodes.OP_GETUPVAR:
             upVar, _ = self.findUpVar(opcode.B)
-            self.registers[opcode.A].moveIn(upVar)
-            pushExpToCodeGen(opcode.A, upVar.value)
+            val = SymbolEx(upVar.lvarSymbol.register, upVar.lvarSymbol.value)
+            self.registers[opcode.A].load(val)
+            pushExpToCodeGen(opcode.A, val)
         elif opcode.opcode == AllOpCodes.OP_SETUPVAR:
             upVarReg, context = self.findUpVar(opcode.B)
             upVarReg.moveIn(self.registers[opcode.A])
             pushExpToCodeGen(opcode.B, upVarReg.value, context.localVarsMap)
 
         elif opcode.opcode == AllOpCodes.OP_JMP:
-            if self.context.isWhenCond():
-                if self.opcodes.pos + 1 == len(self.opcodes):
-                    pass
-                else:
-                    raise Exception("Unexpected jump in when condition")
-            elif opcode.sBx < 0:
+            if opcode.sBx < 0:
                 self.codeGen.pushExp(StatementEx(0, "next"))
             elif self.opcodes.pos + opcode.sBx >= len(self.opcodes):
                 if not self.context.isWhileLoop():
                     raise Exception("Jump out of range")
                 self.codeGen.pushExp(StatementEx(0, "break"))
             else:
-                self.parseWhile()
+                self.parseWhileOrUntil()
         elif opcode.opcode == AllOpCodes.OP_JMPIF:
             self.parseJMPIF()
         elif opcode.opcode == AllOpCodes.OP_JMPNOT:
@@ -351,10 +347,8 @@ class OpCodeReader:
             self.step()
 
     def findUpVar(self, register: int, _checkSelf = False) -> Tuple[Register, OpCodeReader]:
-        if _checkSelf:
-            for regI in self.localVarsMap.keys():
-                if regI == register:
-                    return self.registers[regI], self
+        if _checkSelf and register in self.localVarsMap:
+            return self.registers[register], self
         if self.parent is not None:
             return self.parent.findUpVar(register, True)
         raise Exception("Could not find upvar for register " + str(register))
@@ -488,12 +482,11 @@ class OpCodeReader:
     def parseJMPIF(self):
         jmpCode = cast(MrbCodeAsBx, self.opcodes.cur())
         orEnd = self.opcodes.pos + jmpCode.sBx
-        caseEndCode = self.opcodes[orEnd - 1]
-        if caseEndCode.opcode == AllOpCodes.OP_JMP and caseEndCode.sBx > 0:
-            if self.context.isWhenCond() and orEnd == len(self.opcodes):
-                self.reportBackWhenCond(jmpCode)
-            else:
-                self.parseCase(jmpCode)
+        caseEndCode = self.opcodes[orEnd - 1] if orEnd < len(self.opcodes) else None
+        if self.context.isWhenCond() and self.isOpcodeWhenConditionLite(jmpCode, self.context.data["condRegister"]):
+            self.reportBackWhenCond(jmpCode)
+        elif caseEndCode and caseEndCode.opcode == AllOpCodes.OP_JMP and caseEndCode.sBx > 0 and jmpCode.sBx > 0:
+            self.parseCase(jmpCode)
         else:
             self.parseAndOrOr(jmpCode, OrEx)
 
@@ -523,14 +516,18 @@ class OpCodeReader:
         exp = IfEx(0, condition, ifBlock, elseBlock)
         self.codeGen.pushExp(exp)
 
-    def parseWhile(self):
+    def parseWhileOrUntil(self):
         jmpToCondCode = cast(MrbCodeAsBx, self.opcodes.cur())
         condStart = self.opcodes.pos + jmpToCondCode.sBx
         condEnd = condStart + 1
         condEndJmp = cast(MrbCodeAsBx, self.opcodes[condEnd])
-        while not (condEndJmp.opcode == AllOpCodes.OP_JMPIF and condEndJmp.sBx < 0):
+        while not (condEndJmp.opcode in { AllOpCodes.OP_JMPIF, AllOpCodes.OP_JMPNOT } and condEndJmp.sBx < 0):
             condEnd += 1
+            if condEnd >= len(self.opcodes):
+                self.JMPFallback(jmpToCondCode)
+                return
             condEndJmp = self.opcodes[condEnd]
+        loopType = "while" if condEndJmp.opcode == AllOpCodes.OP_JMPIF else "until"
 
         conditionBody = self.parseSection(condStart, condEnd).getExpressions()
         if len(conditionBody) != 1:
@@ -541,7 +538,7 @@ class OpCodeReader:
         bodyEnd = condStart
         innerContext = self.context.pushAndNew(ParsingState.WHILE_LOOP, True)
         body = self.parseSection(bodyStart, bodyEnd, innerContext).getExpressions()
-        exp = WhileEx(0, condition, BlockEx(0, body))
+        exp = WhileOrUntilEx(0, loopType, condition, BlockEx(0, body))
 
         self.codeGen.pushExp(exp)
         self.opcodes.seek(condEnd)
@@ -549,52 +546,76 @@ class OpCodeReader:
     def reportBackWhenCond(self, jmpCode: MrbCodeAsBx):
         self.context.callback(self.registers[jmpCode.A].valueOrSymbol)
 
-    def parseCaseWhenCond(self, start: int, end: int) -> List[Expression]:
+    def parseCaseWhenCond(self, start: int, end: int, condRegister: int, caseEnd: int) -> List[Expression]:
         if start >= end or start + 1 == end and self.opcodes[start].opcode == AllOpCodes.OP_JMP:
             return []
         conditions: List[Expression] = []
         subContext = self.context.pushAndNew(ParsingState.WHEN_COND)
+        subContext.data["condRegister"] = condRegister
+        subContext.data["caseEnd"] = caseEnd
         subContext.callback = lambda exp: conditions.append(exp)
         self.parseSection(start, end, subContext)
         return conditions
 
-    def parseCaseElse(self, start: int, end: int) -> List[Expression]:
-        return self.parseSection(start, end).getExpressions()
-
     def parseCase(self, jmpCode: MrbCodeAsBx):
         whenBlocks: List[CaseWhenEx] = []
         elseBlock: BlockEx|None = None
+        condRegister = jmpCode.A
 
-        condStart = self.opcodes.pos + 1
+        condStart = self.opcodes.pos
         condEnd = self.opcodes.pos + jmpCode.sBx
-        curWhenConditions: List[Expression] = [self.registers[jmpCode.A].valueOrSymbol]
-        caseEnd = -1
+        curWhenConditions: List[Expression] = []
 
-        while condStart < condEnd:
-            curWhenConditions.extend(self.parseCaseWhenCond(condStart, condEnd))
-            if len(curWhenConditions) == 0:
-                # ending else
-                elseExp = self.parseCaseElse(condStart, condEnd - 1)
-                elseBlock = BlockEx(0, elseExp)
-                caseEnd = condEnd
+        condEndJmpPos = condEnd - 1
+        elseJMP = self.opcodes[condEndJmpPos]
+        caseEndJmpPos = condEndJmpPos + elseJMP.sBx - 1
+        caseEndJMP = self.opcodes[caseEndJmpPos]
+        caseEnd = caseEndJmpPos + caseEndJMP.sBx
+
+        while condStart + 1 < caseEnd:
+            # blockType = "COND"
+            # elseData: List[Expression]|None = None
+            # def blockCallback(blType: str, blData: List[Expression]):
+            #     nonlocal blockType, elseData
+            #     blockType = blType
+            #     if blType == "COND":
+            #         curWhenConditions.append(blData)
+            #     else:
+            #         elseData = blData
+            # subContext = self.context.pushAndNew(ParsingState.WHEN_COND_OR_ELSE)
+            # subContext.callback = blockCallback
+            # self.parseSection(condStart, condEnd, subContext)
+            # if blockType == "ELSE":
+            #     elseBlock = BlockEx(0, elseData)
+            #     break
+            # elif blockType == "COND" and len(curWhenConditions) == 0:
+            #     break
+            foundConditions = 0
+            isLastWhenBlock: bool|None = None
+            pos = condStart
+            while pos < caseEnd and self.opcodes[pos].opcode != AllOpCodes.OP_JMP:
+                isWhenCondition, _isLastWhenBlock = self.isOpcodeWhenConditionFull(self.opcodes[pos], pos, condRegister, caseEnd)
+                if isWhenCondition:
+                    foundConditions += 1
+                    isLastWhenBlock = _isLastWhenBlock
+                pos += 1
+            if foundConditions == 0:
+                elseBody = self.parseSection(condStart, caseEnd - 2).getExpressions()
+                elseBlock = BlockEx(0, elseBody)
                 break
 
-            elseJMP = self.opcodes[condEnd - 1]
-            whenBodyStart = condEnd
-            whenBodyEnd = condEnd + elseJMP.sBx - 2
+            condEnd = pos
+            curWhenConditions.extend(self.parseCaseWhenCond(condStart, condEnd, condRegister, caseEnd - condStart))
+
+            elseJMP = self.opcodes[condEnd]
+            whenBodyStart = condEnd + 1
+            whenBodyEnd = condEnd + elseJMP.sBx - 1
             whenBody = self.parseSection(whenBodyStart, whenBodyEnd).getExpressions()
             whenBlocks.append(CaseWhenEx(curWhenConditions, BlockEx(0, whenBody)))
 
             curWhenConditions.clear()
-            lastJMP = self.opcodes[whenBodyEnd]
-            caseEnd = whenBodyEnd + lastJMP.sBx
             condStart = whenBodyEnd + 1
-            condEnd = condStart + 1
-            while self.opcodes[condEnd].opcode != AllOpCodes.OP_JMP and condEnd < caseEnd:
-                condEnd += 1
-            condEnd += 1
-            if condEnd > caseEnd:
-                # last when
+            if isLastWhenBlock:
                 break
 
         # check if all when conditions are like EXP(variable) === EXP(same)
@@ -621,10 +642,66 @@ class OpCodeReader:
                         for i, cond in enumerate(whenCond.conditions):
                             whenCond.conditions[i] = cond.srcObj
 
-
         exp = CaseEx(0, caseVar, whenBlocks, elseBlock)    # TODO case as assignment
         self.codeGen.pushExp(exp)
         self.opcodes.seek(caseEnd - 1)
 
+    def JMPFallback(self, jmpCode: MrbCodeAsBx):
+        if jmpCode.sBx >= 0:
+            print(f"Warning: JMP outside of known control flow: {jmpCode}")
+            self.codeGen.pushExp(LineCommentEx(0, jmpCode))
+            for mrbCode in self.opcodes[self.opcodes.pos : self.opcodes.pos + jmpCode.sBx]:
+                self.codeGen.pushExp(LineCommentEx(0, mrbCode))
+            self.opcodes.seek(self.opcodes.pos + jmpCode.sBx)
+        else:
+            raise Exception("Negative unhandled JMP")
 
+    def isOpcodeWhenConditionFull(self, jmpIf: MrbCodeAsBx, curPos: int, condRegister: int, caseEnd: int) -> Tuple[bool, bool]:
+        """returns: isWhenCondition, isLastWhenBlock"""
+        # last, jmp to condEnd - 1
+        # non-last when, else jmp to condEnd
+        # valid condition if:
+        # --> opcodes[pos] == JMPIF
+        # --> JMPIF.sBx > 0
+        # --> JMPIF.A == condRegister
+        # --> JMPIF.target - 1 == JMP (elseJMP)
+        # --> elseJMP.sBx > 0 && elseJMP.target < caseEnd
+        # --> elseJMP.target - 1 == JMP (whenEndJMP)
+        # --> whenEndJMP.target == caseEnd || whenEndJMP.target == caseEnd - 1
+        nope = False, False
+        if jmpIf.opcode != AllOpCodes.OP_JMPIF:
+            return nope
+        if jmpIf.sBx < 0:
+            return nope
+        if jmpIf.A != condRegister:
+            return nope
+        elseJmpPos = curPos + jmpIf.sBx - 1
+        if elseJmpPos > caseEnd:
+            return nope
+        elseJmp = cast(MrbCodeAsBx, self.opcodes[elseJmpPos])
+        if elseJmp.opcode != AllOpCodes.OP_JMP:
+            return nope
+        whenEndJmpPos = elseJmpPos + elseJmp.sBx - 1
+        if elseJmp.sBx < 0 or whenEndJmpPos > caseEnd:
+            return nope
+        whenEndJmp = cast(MrbCodeAsBx, self.opcodes[whenEndJmpPos])
+        if whenEndJmp.opcode != AllOpCodes.OP_JMP or whenEndJmp.sBx < 0:
+            return nope
+        whenEndJmpTarget = whenEndJmpPos + whenEndJmp.sBx
+        if whenEndJmpTarget == caseEnd:
+            return True, False
+        if whenEndJmpTarget == caseEnd - 1:
+            return True, True
+        return nope
+
+    def isOpcodeWhenConditionLite(self, jmpIf: MrbCodeAsBx, condRegister: int) -> bool:
+        """returns: isWhenCondition, isLastWhenBlock"""
+        # --> whenEndJMP.target == caseEnd || whenEndJMP.target == caseEnd - 1
+        if jmpIf.opcode != AllOpCodes.OP_JMPIF:
+            return False
+        if jmpIf.sBx < 0:
+            return False
+        if jmpIf.A != condRegister:
+            return False
+        return True
 

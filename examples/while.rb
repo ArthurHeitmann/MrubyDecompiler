@@ -1,4 +1,10 @@
 x = 1 + 2
+
+until x == 3
+  puts x
+  x += 1
+end
+
 while MyMod::X < 42 && rand() < 0.5 || x == 3
   puts "Hello World"
 end

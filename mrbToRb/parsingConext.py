@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Callable, Any
+from typing import List, Callable, Any, Dict
 
 
 class ParsingState:
@@ -9,11 +9,13 @@ class ParsingState:
     WHILE_LOOP = 3
     IF = 4
     WHEN_COND = 5
+    CASE_ELSE = 6
 
 class ParsingContext:
     parentStates: List[ParsingState]
     callback: Callable[..., Any]|None
     hasMoreOpcodesOutside: bool
+    data: Dict
 
     def __init__(self, state: ParsingState, parent: ParsingContext|None = None, hasMoreOpcodesOutside: bool = False) -> None:
         if parent:
@@ -22,6 +24,7 @@ class ParsingContext:
             self.parentStates = [state]
         self.callback = None
         self.hasMoreOpcodesOutside = hasMoreOpcodesOutside
+        self.data = {}
 
     def isMethod(self):
         return ParsingState.METHOD in self.parentStates
@@ -56,6 +59,12 @@ class ParsingContext:
 
     def isWhenCond(self):
         return self.parentStates[-1] == ParsingState.WHEN_COND
+
+    def isWhenCondOrElse(self):
+        return self.parentStates[-1] == ParsingState.CASE_ELSE
+
+    def updateState(self, state: ParsingState) -> None:
+        self.parentStates[-1] = state
 
     def pushAndNew(self, state: ParsingState, hasMore: bool = False) -> ParsingContext:
         return ParsingContext(state, self, hasMore)
