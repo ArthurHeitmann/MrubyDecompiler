@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import sys
 import time
@@ -7,12 +8,12 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 from mrbParser import RiteFile
 from mrbToRb.mrbToRb import mrbToRb
 
-def decompileFile(file: str):
+def decompileFile(file: str, outFile: str|None = None):
     with open(file, "rb") as f:
         riteFile = RiteFile(f)
         codesRes = mrbToRb(riteFile)
         # print(codesRes.toStr())
-    with open(f"{file}.rb", "wb") as f:
+    with open(outFile or "{file}.rb", "wb") as f:
         f.write(codesRes.toStr().encode("utf-8", "ignore"))
 
 def compileFile(file: str):
