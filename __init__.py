@@ -17,13 +17,13 @@ def decompileFile(file: str, outFile: str|None = None):
         f.write(codesRes.toStr().encode("utf-8", "ignore"))
 
 def compileFile(file: str, outFile: str|None = None):
+    WIN_BIN = "bins\\windows\\mrbc.exe"
+    LINUX_BIN = "bins/linux/mrbc.exe"
+    curDir = os.path.dirname(os.path.realpath(__file__))
+    binAbs = os.path.join(curDir, WIN_BIN if os.name == "nt" else LINUX_BIN)
     outFile = outFile or file + ".mrb"
-    if os.name == "nt":
-        os.system(f".\\bins\\windows\\mrbc.exe -o \"{outFile}\" \"{file}\"")
-    elif os.name == "posix":
-        os.system(f"./bins/linux/mrbc.exe -o \"{outFile}\" \"{file}\"")
-    else:
-        print(f"Unknown OS '{os.name}'")
+    cmd = f"{binAbs} -o \"{outFile}\" \"{file}\""
+    os.system(cmd)
 
 if __name__ == "__main__":
     mrbFiles = file = sys.argv[1:] #if len(sys.argv) >= 2 else ["./examples/case.rb"]
