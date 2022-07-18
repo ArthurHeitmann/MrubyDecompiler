@@ -5,9 +5,6 @@ import time
 from mrbParser import RiteFile
 from mrbToRb.mrbToRb import mrbToRb
 
-mrbFiles = file = sys.argv[1:]
-# file = sys.argv[1] if len(sys.argv) >= 2 else "./examples/case.mrb"
-
 def decompileFile(file: str):
     with open(file, "rb") as f:
         riteFile = RiteFile(f)
@@ -24,17 +21,20 @@ def compileFile(file: str):
     else:
         print(f"Unknown OS '{os.name}'")
 
-t1 = time.time()
+if __name__ == "__main__":
+    mrbFiles = file = sys.argv[1:]
+    # file = sys.argv[1] if len(sys.argv) >= 2 else "./examples/case.mrb"
+    t1 = time.time()
 
-for file in mrbFiles:
-    if file.endswith(".mrb") or file.endswith("_scp.bin"):
-        print(f"Decompiling {file}")
-        decompileFile(file)
-    elif file.endswith(".rb"):
-        print(f"Compiling {file}")
-        compileFile(file)
-    else:
-        print(f"Unknown file type: {file}")
+    for file in mrbFiles:
+        if file.endswith(".mrb") or file.endswith("_scp.bin"):
+            print(f"Decompiling {file}")
+            decompileFile(file)
+        elif file.endswith(".rb"):
+            print(f"Compiling {file}")
+            compileFile(file)
+        else:
+            print(f"Unknown file type: {file}")
 
-t2 = time.time()
-print(f"Time: {((t2 - t1)*1000):.1f}ms")
+    t2 = time.time()
+    print(f"Time: {((t2 - t1)*1000):.1f}ms")
