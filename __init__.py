@@ -19,7 +19,7 @@ def decompileFile(file: str, outFile: str|None = None):
 def compileFile(file: str, outFile: str|None = None):
     outFile = outFile or file + ".mrb"
     if os.name == "nt":
-        os.system(f"bins\\windows\\mrbc.exe -o \"{outFile}\" \"{file}\"")
+        os.system(f".\\bins\\windows\\mrbc.exe -o \"{outFile}\" \"{file}\"")
     elif os.name == "posix":
         os.system(f"./bins/linux/mrbc.exe -o \"{outFile}\" \"{file}\"")
     else:
