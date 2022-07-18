@@ -571,9 +571,12 @@ class IfEx(StatementEx):
 		ifBlock = prefixLines(str(self.ifBlock), "\t")
 		if self.elseBlock is None:
 			return f"if {self.condition}\n{ifBlock}\nend"
-		else:
+		elif len(self.ifBlock.expressions) > 0:
 			elseBlock = prefixLines(str(self.elseBlock), "\t")
 			return f"if {self.condition}\n{ifBlock}\nelse\n{elseBlock}\nend"
+		else:
+			elseBlock = prefixLines(str(self.elseBlock), "\t")
+			return f"unless {self.condition}\n{elseBlock}\nend"
 
 class MConstSymbolEx(TwoExpEx):
 	def _toStr(self):
@@ -641,3 +644,12 @@ class CaseEx(Expression):
 class BlkPushEx(Expression):
 	def _toStr(self):
 		return "# ERROR! This shouldn't be here! #"
+
+class RaiseEx(StatementEx):
+	def __init__(self, register: int, exception: Expression):
+		super().__init__(register, "raise")
+		self.exception = exception
+		exception.hasUsages = True
+
+	def _toStr(self):
+		return f"raise {self.exception}"

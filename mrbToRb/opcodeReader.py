@@ -120,7 +120,8 @@ class OpCodeReader:
                 self.codeGen.pushExp(StatementEx(0, "next"))
             elif self.opcodes.pos + opcode.sBx >= len(self.opcodes):
                 if not self.context.isWhileLoop():
-                    raise Exception("Jump out of range")
+                    self.codeGen.pushExp(RaiseEx(0, StringEx(0, "ERROR: Unexpected JMP! (continuing anyways)")))
+                    print("ERROR: Unexpected JMP! (continuing anyways)")
                 self.codeGen.pushExp(StatementEx(0, "break"))
             else:
                 self.parseWhileOrUntil()
@@ -164,10 +165,17 @@ class OpCodeReader:
         #     unhandledOpCode()
         # elif opcode.opcode == AllOpCodes.OP_CALL:
         #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_SUPER:
-        #     unhandledOpCode()
-        # elif opcode.opcode == AllOpCodes.OP_ARGARY:
-        #     unhandledOpCode()
+        elif opcode.opcode == AllOpCodes.OP_SUPER:
+            if opcode.C != 0x7f:
+                args = [reg.value for reg in self.registers[opcode.A + 1: opcode.A + 1 + opcode.C]]
+            else:
+                args = []
+            exp = MethodCallEx(opcode.A, None, SymbolEx(0, "super"), args)
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
+        elif opcode.opcode == AllOpCodes.OP_ARGARY:
+            exp = RaiseEx(0, StringEx(0, "ERROR: OP_ARGARY should not be visible!"))
+            self.registers[opcode.A].load(exp)
         # elif opcode.opcode == AllOpCodes.OP_ENTER:
         #     unhandledOpCode()
         # elif opcode.opcode == AllOpCodes.OP_KARG:
@@ -222,10 +230,10 @@ class OpCodeReader:
         elif opcode.opcode == AllOpCodes.OP_ARYPUSH:
             exp = ArrayPushEx(opcode.A, self.registers[opcode.A].value, self.registers[opcode.B].value)
             self.codeGen.pushExp(exp)
-        # elif opcode.opcode == AllOpCodes.OP_AREF:
-        #     exp = ArrayRefEx(opcode.A, self.registers[opcode.B].value, opcode.C)
-        #     self.registers[opcode.A].load(exp)
-        #     pushExpToCodeGen(opcode.A, exp)
+        elif opcode.opcode == AllOpCodes.OP_AREF:
+            exp = ArrayRefEx(opcode.A, self.registers[opcode.B].value, opcode.C)
+            self.registers[opcode.A].load(exp)
+            pushExpToCodeGen(opcode.A, exp)
         # elif opcode.opcode == AllOpCodes.OP_ASET:
         #     exp = ArraySetEx(opcode.A, cast(SymbolEx, self.registers[opcode.B].value), opcode.C, self.registers[opcode.A].value)
         #     self.codeGen.pushExp(exp)
@@ -448,6 +456,8 @@ class OpCodeReader:
         return args, body
 
     def parseSection(self, start: int, end: int, newContext: ParsingContext|None = None, copyRegister = True) -> CodeGen:
+        if start > end:
+            raise Exception("Invalid section")
         tmpIrep = copy.copy(self.irep)
         tmpIrep.mrbCodes = tmpIrep.mrbCodes[start : end]
         codeGen = CodeGen()
@@ -499,7 +509,7 @@ class OpCodeReader:
         jmpCode = cast(MrbCodeAsBx, self.opcodes.cur())
         andEnd = self.opcodes.pos + jmpCode.sBx
         ifEndCode = self.opcodes[andEnd - 1]
-        if ifEndCode.opcode == AllOpCodes.OP_JMP and ifEndCode.sBx > 0 and andEnd + ifEndCode.sBx - 1 <= len(self.opcodes):
+        if ifEndCode.opcode == AllOpCodes.OP_JMP and ifEndCode.sBx > 0 and ((andEnd + ifEndCode.sBx - 1) <= len(self.opcodes)):
             self.parseIfElse(jmpCode, andEnd + ifEndCode.sBx - 1)
         else:
             self.parseAndOrOr(jmpCode, AndEx)
