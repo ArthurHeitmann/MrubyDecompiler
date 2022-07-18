@@ -16,11 +16,12 @@ def decompileFile(file: str, outFile: str|None = None):
     with open(outFile or "{file}.rb", "wb") as f:
         f.write(codesRes.toStr().encode("utf-8", "ignore"))
 
-def compileFile(file: str):
+def compileFile(file: str, outFile: str|None = None):
+    outFile = outFile or file + ".mrb"
     if os.name == "nt":
-        os.system(f"bins\\windows\\mrbc.exe {file}")
+        os.system(f"bins\\windows\\mrbc.exe -o \"{outFile}\" \"{file}\"")
     elif os.name == "posix":
-        os.system(f"./bins/linux/mrbc.exe {file}")
+        os.system(f"./bins/linux/mrbc.exe -o \"{outFile}\" {file}\"")
     else:
         print(f"Unknown OS '{os.name}'")
 
