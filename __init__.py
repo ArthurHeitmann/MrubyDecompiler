@@ -2,6 +2,8 @@ import os
 import sys
 import time
 
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
 from mrbParser import RiteFile
 from mrbToRb.mrbToRb import mrbToRb
 
