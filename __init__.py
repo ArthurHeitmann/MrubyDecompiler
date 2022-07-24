@@ -5,6 +5,7 @@ import time
 
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
+from decompileAll import decompileAll
 from mrbParser import RiteFile
 from mrbToRb.mrbToRb import mrbToRb
 
@@ -26,18 +27,24 @@ def compileFile(file: str, outFile: str|None = None):
     os.system(cmd)
 
 if __name__ == "__main__":
-    mrbFiles = file = sys.argv[1:] #if len(sys.argv) >= 2 else ["./examples/case.rb"]
+    mrbFiles = [f for f in sys.argv[1:] if os.path.exists(f)]
     t1 = time.time()
 
-    for file in mrbFiles:
-        if file.endswith(".mrb") or file.endswith("_scp.bin"):
-            print(f"Decompiling {file}")
-            decompileFile(file)
-        elif file.endswith(".rb"):
-            print(f"Compiling {file}")
-            compileFile(file)
-        else:
-            print(f"Unknown file type: {file}")
+    if "--decompileAll" in sys.argv:
+        decompileAll(mrbFiles[0])
+    else:
+        for file in mrbFiles:
+            if file.endswith(".mrb") or file.endswith("_scp.bin"):
+                print(f"Decompiling {file}")
+                decompileFile(file)
+            elif file.endswith(".rb"):
+                print(f"Compiling {file}")
+                compileFile(file)
+            else:
+                print(f"Unknown file type: {file}")
 
-    t2 = time.time()
-    print(f"Time: {((t2 - t1)*1000):.1f}ms")
+    tD = time.time() - t1
+    if tD < 0.5:
+        print(f"Time: {(tD*1000):.1f}ms")
+    else:
+        print(f"Time: {tD:.1f}s")
