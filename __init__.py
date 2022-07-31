@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import sys
+import subprocess
 import time
 
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
@@ -23,8 +24,8 @@ def compileFile(file: str, outFile: str|None = None):
     curDir = os.path.dirname(os.path.realpath(__file__))
     binAbs = os.path.join(curDir, WIN_BIN if os.name == "nt" else LINUX_BIN)
     outFile = outFile or file + ".mrb"
-    cmd = f"{binAbs} -o \"{outFile}\" \"{file}\""
-    os.system(cmd)
+    cmd = f"\"{binAbs}\" -o \"{outFile}\" \"{file}\""
+    subprocess.call(cmd)
 
 if __name__ == "__main__":
     mrbFiles = [f for f in sys.argv[1:] if os.path.exists(f)]
