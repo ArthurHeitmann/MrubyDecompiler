@@ -366,7 +366,7 @@ class HashEx(Expression):
 		if len(self.hash) == 0:
 			return "{}"
 		elif len(self.hash) == 1:
-			return f"{{ {list(self.hash.keys())[0]}: {list(self.hash.values())[0]} }}"
+			return f"{{ {list(self.hash.keys())[0]} => {list(self.hash.values())[0]} }}"
 		else:
 			lines = []
 			for key, value in self.hash.items():
