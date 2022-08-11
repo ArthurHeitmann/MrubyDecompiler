@@ -6,30 +6,22 @@ currently isn't 100% optimal and can still be optimized, but is good enough for 
 The main reason I made this is to decompile mruby scripts for the game Nier:Automata.
 So it's mostly focused on the game's script files.
 
+If you need auto recompiling for Nier modding, check out [NierAutoRebuild](https://github.com/ArthurHeitmann/NierAutoRebuild).
+
 ## Usage
 
 `__init__.py` can both compile and decompile ruby/mrb files. This repository comes with precompiled mruby binaries.
 
 #### 1. Without command line
 
-Drag any rb/mrb/bin files you want onto the `__init__.py` file. This will automatically (de-)compile them.
+Drag any rb/mrb/bin files or folder you want onto the `__init__.py` file. This will automatically (de-)compile them.  
+If it's a folder, it will decompile all files in the folder.
 
 #### 2. With command line
 
-##### 2.1
-
 ```bash
-python __init__.py <file1> <file2> ...
+python __init__.py <file1> <file2> <folderX> ...
 ```
-
-##### 2.2
-
-```bash
-python __init__.py --decompileAll <directory>
-```
-
-This will decompile all `.mrb` or `_scp.bin` files in the folder. 
-
 ## Issues and things to watch out for
 
 - For most function calls inside classes, modules, etc. the decompiler prefixes them with `self.` which can usually be omitted.
