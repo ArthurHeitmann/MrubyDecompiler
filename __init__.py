@@ -35,7 +35,10 @@ if __name__ == "__main__":
         decompileAll(mrbFiles[0])
     else:
         for file in mrbFiles:
-            if file.endswith(".mrb") or file.endswith("_scp.bin"):
+            if os.path.isdir(file):
+                print(f"Decompiling all files in {file}")
+                decompileAll(file)
+            elif file.endswith(".mrb") or file.endswith("_scp.bin"):
                 print(f"Decompiling {file}")
                 decompileFile(file)
             elif file.endswith(".rb"):
