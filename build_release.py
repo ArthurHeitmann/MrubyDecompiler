@@ -2,30 +2,22 @@ from __future__ import annotations, print_function
 import importlib
 import shutil
 import os
-import io
 from platform import system as what_platform
 from enum import Enum
 from typing import List, NoReturn
-
-# TO-DO: Make the build script simpler!
 
 
 """
 TARGET (str):
     Target script which is the "Entry Point"
 
-BATCH_ONLY (boolean):
-    Whether it should patch the target script to be only for
-    batch decompiling, allowing to simply drop the unpacked
-    DAT folder onto the EXE
-
 ONE_FILE (boolean):
     If "True", a single executable will be generated
 
 REQUIRE_ADMIN (boolean):
     Only effects Windows builds.
-    It is recommended to keep this at "True" such that the app
-    is not dealing with any potential privilege issues
+    Only set this to "True" if you experience
+    application privilege issues on Windows.
 
 ICON (str):
     Only applies if ICON field is NOT None.
@@ -33,16 +25,41 @@ ICON (str):
     ICON should either be None or a string path
     to a proper ".ico" file
 """
+
+# IMPORTANT TIP! (VERY SECRET)
+
+# If you run this script ("build_release.py")
+# with the option -OO, it will build it in "RELEASE MODE"
+# This will remove any assert, __debug__ dependent statements,
+# and docstrings from the decompiler.
+# This results in a smaller binary (executable), and hopefully
+# a bit faster :)
+# Unfortunately at the cost of your release being harder to debug.
+# But you can always just download the source of the release,
+# and run the build script without -OO to have an executable
+# fitting for finding out what's wrong when replicating the user's bug.
+
+# So run it like this... with (INTERPRETER) being whatever your Python binary is
+#   (INTERPRETR) -OO build_release.py
+
 TARGET: str = "__init__.py"
-BATCH_ONLY: bool = False
 ONE_FILE: bool = True
-REQUIRE_ADMIN: bool = True
+REQUIRE_ADMIN: bool = False
 ICON: str = None
 
-# Helper...
-def ASSERT_STR(inp: str) -> bool:
-    assert type(inp) is str, "Must be type STRING (str)"
+def WASSERT(t: type, x) -> bool:
+    assert type(x) is t, "Must be type {}".format(t.__name__)
     return True
+
+# wrap WASSERT...
+def ASSERT_STR(inp: str) -> bool:
+    return WASSERT(str, inp)
+
+def ASSERT_BOOL(inp: bool) -> bool:
+    return WASSERT(bool, inp)
+
+def ASSERT_INT(inp: int) -> bool:
+    return WASSERT(int, inp)
 
 """
 Enum Wrapper
@@ -89,23 +106,59 @@ class Platform(object):
 Exception to be thrown by
 [dyn_import_build_tool] if not on a supported platform
 """
-class DynImportError(Exception):
+class DynImportError(BaseException):
     def __init__(self, m):
         super().__init__(m)
 
 """
-Automatically detects the platform
-and selects the appropriate build tool accordingly.
+Wrapper for importlib.import_module
+"""
+def try_import(part: str, main_module: str) -> object or NoReturn:
+    # In Python versions 3.6 and above, importlib.import_module
+    # will throw a ModuelNotFoundError (only available in 3.6 and above)
+    # But, ModuleNotFoundError inherits from ImportError, so we can
+    # just use that instead for compatibility...
+    def concat_imp_mod() -> str:
+        # so i can take advantage of "nonlocal" for once
+        # lol, must be one of the most unused Python features i swear
+
+        #... although this could've been achieved as well with
+        # functools.partial probably
+        nonlocal part
+        nonlocal main_module
+        return main_module+part
+
+    #def dyn_error() -> type:
+    #    v = sys.version_info
+    #    inheritable = None
+    #    if (v.major >= 3 and v.minor >= 6):
+    #        return ModuleNotFoundError
+    #    return ImportError
+
+    try:
+        imp = importlib.import_module(part,main_module)
+        return imp
+    except ImportError: #dyn_error():
+        raise DynImportError(
+            "Make sure that you have {} installed, sillygoose!".format(
+                concat_imp_mod()
+            )
+        )
+    except:
+        raise DynImportError(
+            "An unknown error occurred whilst trying to import {}".format(
+                concat_imp_mod()
+            )
+        )
+
+"""
+Selects the appropriate build tool,
+in accordance with the currently selected platform.
 Exits with [DynImportError] upon failure.
 """
 def dyn_import_build_tool(plat: str) -> object or NoReturn:
     if (Platform.is_windows(plat) or Platform.is_linux(plat)):
-        try:
-            bt = importlib.import_module(".__main__","PyInstaller")
-        except:
-            raise DynImportError(
-                "Make sure that you have PyInstaller, sillygoose!"
-            )
+        bt = try_import(".__main__","PyInstaller")
         return bt
     else:
         def gen_supported() -> str:
@@ -115,7 +168,6 @@ def dyn_import_build_tool(plat: str) -> object or NoReturn:
                 sup += "\t\t"+p+"\n"
 
             return sup
-
 
         raise DynImportError(
             "\n\tNot on a supported platform.\n\tSupported platforms are:\n {}".format(
@@ -131,12 +183,9 @@ class Builder(object):
     build_tool = None
     current_platform = None
     target_script = None
-    should_patch = None
-    PATCHED_FN = None
 
     class RM_T(WEnum):pass
 
-    def patch_target(self):pass
     def gen_opts(self):pass
     def start_build(self):pass
     def gen_opts(self):pass
@@ -144,7 +193,6 @@ class Builder(object):
     def clean_up(self):pass
 
 class WBuilder(Builder):
-    PATCHED_FN = "patched.py"
     def __new__(cls):
         # dynamically choose which build tool depending on platform
         # currently just PyInstaller for Linux & Windows
@@ -152,21 +200,19 @@ class WBuilder(Builder):
         cls.current_platform = Platform.get_platform()
         print("You are on {}".format(cls.current_platform.upper()))
         cls.build_tool = dyn_import_build_tool(cls.current_platform)
-        print("Build tool selected: {}\n\n".format(cls.build_tool.__name__))
+        print("Build tool selected: {}\n".format(cls.build_tool.__name__))
 
         global TARGET
-        assert type(TARGET) == str, "\'TARGET\' must be a STRING (str)"
+        ASSERT_STR(TARGET)
         cls.target_script = TARGET
-
-        global BATCH_ONLY
-        assert type(BATCH_ONLY) == bool, "\'BATCH_ONLY\' must be a BOOLEAN (bool)"
-        cls.should_patch = BATCH_ONLY
 
         return super().__new__(cls)
 
 
     def __init__(self):
-        self.entry_script = self.target_script if not self.should_patch else self.PATCHED_FN
+        self.OUTPUT_NAME = "MrbDecompiler"
+
+        self.entry_script = self.target_script
         self.opts = None
         self.isw:bool = Platform.is_windows(self.current_platform)
         self.isl: bool = Platform.is_linux(self.current_platform)
@@ -175,45 +221,33 @@ class WBuilder(Builder):
         print("\nBuilding...")
         (
             self
-                .patch_target()
                 .gen_opts()
                 .finalize_build()
                 .clean_up()
         )
 
-    def patch_target(self) -> object:
-        if self.should_patch:
-            print("\nPatching entry (BATCH_ONLY = True)...")
-            t = io.open(self.target_script,"r")
-            content = t.read()
-            t.close()
-            content = content.replace("\"--decompileAll\" in sys.argv","True")
-            content = content.replace(".argv[1:]",".argv[0:]")
-            p = io.open(self.entry_script,"w")
-            p.write(content)
-            p.close()
-            print("Done Patching.\n\n")
-        return self
-
     def gen_opts(self) -> object:
         print("Generating options...")
         global ONE_FILE, REQUIRE_ADMIN, ICON
+        ASSERT_BOOL(ONE_FILE)
+        ASSERT_BOOL(REQUIRE_ADMIN)
+        # cant assert ICON since it can be None...
 
         if (self.isw or
             self.isl):
             self.opts = []
             self.opts.append(self.entry_script)
-            self.opts.append("-n=MrbDecompiler")
+            self.opts.append("-n={}".format(self.OUTPUT_NAME))
             self.opts.append("--clean")
             self.opts.append("-y")
             self.opts.append("--log-level=ERROR")
-            assert type(ONE_FILE) == bool, "\'ONE_FILE\' must be BOOLEAN (bool)"
             if (ONE_FILE):
                 self.opts.append("--onefile")
-            if self.isw and (ICON != None) and (ASSERT_STR(ICON)):
-                self.opts.append("-i={}".format(ICON))
-            if self.isw and REQUIRE_ADMIN:
-                self.opts.append("--uac-admin")
+            if self.isw:
+                if (ICON != None) and (ASSERT_STR(ICON)):
+                    self.opts.append("-i={}".format(ICON))
+                if REQUIRE_ADMIN:
+                    self.opts.append("--uac-admin")
 
         return self
 
@@ -264,7 +298,7 @@ class WBuilder(Builder):
 
         rm_dir("build")
         rm_dir("__pycache__")
-        rm_file(self.PATCHED_FN)
+        rm_file(self.OUTPUT_NAME+".spec")
 
         return self
 
