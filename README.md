@@ -23,9 +23,9 @@ If it's a folder, it will decompile all files in the folder.
 python __init__.py <file1> <file2> <folderX> ...
 ```
 
-#### 3. With frozen executable (binary)
+#### 3. Compile tool to frozen executable (binary)
 
-You can either use binaries found in the [Releases Tab](https://github.com/ArthurHeitmann/MrubyDecompiler/releases), if any are there. Or, you can follow these steps to create your own frozen binary.
+You can compile the main script to an executable, if you want to be python independent.
 
 *Currently supports Windows and Linux*
 *"python" is your Python 3 interpreter*
