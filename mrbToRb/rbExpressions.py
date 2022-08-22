@@ -330,7 +330,7 @@ class StringEx(AnyValueExpression):
 
 class StringConcatEx(TwoExpEx):
 	def _toStr(self):
-		if isinstance(self.left, StringEx) and self.left.value == "":
+		if isinstance(self.left, StringEx) and self.left.value == "" and isinstance(self.right, StringEx):
 			return f'"{self.right}"'
 		parts: List[Expression]
 		if isinstance(self.left, StringConcatEx):
