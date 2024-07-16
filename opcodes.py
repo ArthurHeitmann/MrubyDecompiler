@@ -1,5 +1,6 @@
 from __future__ import annotations
 import ctypes
+from typing import List
 
 def getMrbCode(mrbCode) -> MrbCode:
 	opcode = mrbCode & 0x7f
@@ -8,10 +9,20 @@ def getMrbCode(mrbCode) -> MrbCode:
 class MrbCode:
 	opcode: int
 	fullOpcode: int
+	stats: MrbCodeStats
+
+	A: int
+	B: int
+	C: int
+	Bx: int
+	sBx: int
+	Ax: int
+	
 
 	def __init__(self, mrbCode: int) -> None:
 		self.opcode = mrbCode & 0x7f
 		self.fullOpcode = mrbCode
+		self.stats = MrbCodeStats()
 
 	def __str__(self) -> str:
 		return opcodes[self.opcode][0]
@@ -124,6 +135,32 @@ class MrbCodeBlkPush(MrbCodeABx):
 
 	def __str__(self) -> str:
 		return f"{opcodes[self.opcode][0]}:  b1: {self.b1} b2: {self.b2} b3: {self.b3} b4: {self.b4}"
+
+class MrbCodeStats:
+	isReachable: bool
+
+	def __init__(self) -> None:
+		self.isReachable = False
+
+def markDeadCode(codes: List[MrbCode], start: int) -> None:
+	i = start
+	while i >= 0 and i < len(codes):
+		code = codes[i]
+		if code.stats.isReachable:
+			break
+		code.stats.isReachable = True
+		if code.opcode == AllOpCodes.OP_JMP:
+			i += code.sBx
+		elif code.opcode == AllOpCodes.OP_JMPIF or code.opcode == AllOpCodes.OP_JMPNOT:
+			markDeadCode(codes, i + 1)
+			i += code.sBx
+		elif code.opcode == AllOpCodes.OP_RETURN:
+			break
+		elif code.opcode == AllOpCodes.OP_STOP:
+			break
+		else:
+			i += 1
+
 
 opcodes = [
 	["OP_NOP", MrbCode],

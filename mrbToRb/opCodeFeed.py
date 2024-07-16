@@ -7,10 +7,14 @@ from opcodes import *
 class OpCodeFeed:
     opcodes: List[MrbCode]
     pos: int
+    fullOpcodes: List[MrbCode]
+    offset: int
 
-    def __init__(self, opcodes: List[MrbCode]):
+    def __init__(self, opcodes: List[MrbCode], fullOpcodes: List[MrbCode]|None = None, offset: int = 0):
         self.opcodes = opcodes
         self.pos = 0
+        self.fullOpcodes = fullOpcodes or opcodes
+        self.offset = offset
 
     def cur(self) -> Union[MrbCode, MrbCodeABC, MrbCodeABx, MrbCodeAsBx, MrbCodeAx]:
         return self.opcodes[self.pos]
@@ -36,9 +40,13 @@ class OpCodeFeed:
         if isinstance(item, int):
             return self.opcodes[item]
         elif isinstance(item, slice):
-            return OpCodeFeed(self.opcodes[item.start:item.stop:item.step])
+            return OpCodeFeed(self.opcodes[item.start:item.stop:item.step], self.fullOpcodes, self.offset + item.start)
         else:
             raise TypeError(f"Invalid slice type {type(item)}")
+
+    def getJumpedOpcodes(self, count: int) -> List[MrbCode]:
+        start = self.offset + self.pos
+        return self.fullOpcodes[start + 1:start + count]
 
     def getRel(self, offset: int):
         return self.opcodes[self.pos + offset]

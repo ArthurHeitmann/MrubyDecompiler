@@ -10,7 +10,7 @@ class Register:
 	lvarSymbol: SymbolEx|None
 	tmpLvarSymbol: SymbolEx|None
 
-	def __init__(self, i: int, lvarName: str = None):
+	def __init__(self, i: int, lvarName: str|None = None):
 		self.i = i
 		self.regSymbol = SymbolEx(i, f"_r_{i}")
 		if lvarName:
@@ -18,7 +18,7 @@ class Register:
 		else:
 			self.lvarSymbol = None
 		self.tmpLvarSymbol = None
-		self._value = self.lvarSymbol if lvarName else NilEx(0)
+		self._value = self.lvarSymbol if lvarName else NilEx(0) # type: ignore
 
 	def moveIn(self, other: Register):
 		if other.lvarSymbol:

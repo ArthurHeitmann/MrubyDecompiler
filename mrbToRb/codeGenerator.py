@@ -14,7 +14,7 @@ class CodeGen:
 	def pushExp(self, expression: Expression) -> None:
 		self.expressions.append(expression)
 
-	def popExps(self, exps: List[Expression], replacement: Expression = None) -> None:
+	def popExps(self, exps: List[Expression], replacement: Expression|None = None) -> None:
 		for exp in exps[:-1]:
 			self.expressions.remove(exp)
 		lastIndex = self.expressions.index(exps[-1])

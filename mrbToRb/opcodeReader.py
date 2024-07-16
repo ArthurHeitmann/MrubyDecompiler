@@ -16,7 +16,7 @@ from utils import ENCODING
 class OpCodeReader:
     registers: List[Register]
     currentClass: SymbolEx
-    parent: OpCodeReader
+    parent: OpCodeReader|None
     context: ParsingContext
     opcodes: OpCodeFeed
     pool: List[str]
@@ -29,7 +29,7 @@ class OpCodeReader:
     codeGen: CodeGen
 
     def __init__(self, irep: RiteIrepSection, lvars: RiteLvarRecord, parent: OpCodeReader | None, curClass: SymbolEx,
-                 codeGen: CodeGen, context: ParsingContext):
+                 codeGen: CodeGen, context: ParsingContext, fullIrepCodes: List[MrbCode]|None = None, originalIrepOffset: int = 0):
         self.parent = parent
         self.pool = list(map(lambda b: b.decode(ENCODING, "ignore"), irep.pools))
         self.symbols = list(map(lambda s: SymbolEx(0, s), irep.symbols))
@@ -40,7 +40,7 @@ class OpCodeReader:
         for i in range(irep.numRegisterVariables + 1):
             self.registers.append(Register(i, self.localVarsMap.get(i, None)))
         self.currentClass = curClass
-        self.opcodes = OpCodeFeed(irep.mrbCodes)
+        self.opcodes = OpCodeFeed(irep.mrbCodes, fullIrepCodes, originalIrepOffset)
         self.irep = irep
         self.lvars = lvars
         self.childIreps = irep.childIreps
@@ -52,7 +52,7 @@ class OpCodeReader:
         opcode = self.opcodes.cur()
         # self.codeGen.pushExp(LineCommentEx(0, str(opcode)))
 
-        def pushExpToCodeGen(regI: int, expression: Expression, localVarsMap: Dict = None):
+        def pushExpToCodeGen(regI: int, expression: Expression, localVarsMap: Dict|None = None):
             if not localVarsMap:
                 localVarsMap = self.localVarsMap
             if regI in localVarsMap:
@@ -119,10 +119,17 @@ class OpCodeReader:
             if opcode.sBx < 0:
                 self.codeGen.pushExp(StatementEx(0, "next"))
             elif self.opcodes.pos + opcode.sBx >= len(self.opcodes):
-                if not self.context.isWhileLoop():
-                    self.codeGen.pushExp(RaiseEx(0, StringEx(0, "ERROR: Unexpected JMP! (continuing anyways)")))
-                    print("ERROR: Unexpected JMP! (continuing anyways)")
-                self.codeGen.pushExp(StatementEx(0, "break"))
+                if self.context.isWhileLoop():
+                    self.codeGen.pushExp(StatementEx(0, "break"))
+                else:
+                    jumpedOpcodes = self.opcodes.getJumpedOpcodes(opcode.sBx)
+                    if len(jumpedOpcodes) == 0 or len(jumpedOpcodes) <= 2 and all(not code.stats.isReachable for code in jumpedOpcodes):
+                        self.opcodes.jump(opcode.sBx)
+                    else:
+                        self.codeGen.pushExp(RaiseEx(0, StringEx(0, f"ERROR: Unexpected JMP {'+' if opcode.sBx > 0 else ''}{opcode.sBx}! (continuing anyways)")))
+                        for jmpOp in jumpedOpcodes:
+                            self.codeGen.pushExp(LineCommentEx(0, str(jmpOp)))
+                        print(f"ERROR: Unexpected JMP {'+' if opcode.sBx > 0 else ''}{opcode.sBx} ({len(jumpedOpcodes)})! (continuing anyways)")
             else:
                 self.parseWhileOrUntil()
         elif opcode.opcode == AllOpCodes.OP_JMPIF:
@@ -461,7 +468,7 @@ class OpCodeReader:
         tmpIrep = copy.copy(self.irep)
         tmpIrep.mrbCodes = tmpIrep.mrbCodes[start : end]
         codeGen = CodeGen()
-        opcodeReader = OpCodeReader(tmpIrep, self.lvars, self.parent, self.currentClass, codeGen, newContext or self.context)
+        opcodeReader = OpCodeReader(tmpIrep, self.lvars, self.parent, self.currentClass, codeGen, newContext or self.context, self.opcodes.fullOpcodes, self.opcodes.offset + start)
         if copyRegister:
             for i in range(len(self.registers)):
                 opcodeReader.registers[i] = copy.copy(self.registers[i])
@@ -615,7 +622,7 @@ class OpCodeReader:
                     isLastWhenBlock = _isLastWhenBlock
                 pos += 1
             if foundConditions == 0:
-                elseBody = self.parseSection(condStart, caseEnd - 2).getExpressions()
+                elseBody = self.parseSection(condStart, caseEnd - 1).getExpressions()
                 elseBlock = BlockEx(0, elseBody)
                 break
 

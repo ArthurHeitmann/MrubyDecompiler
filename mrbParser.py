@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import BinaryIO, List
 from ioUtils import *
-from opcodes import MrbCode, getMrbCode
+from opcodes import MrbCode, getMrbCode, markDeadCode
 
 class RiteBinaryHeader:
 	"""
@@ -126,6 +126,7 @@ class RiteIrepSection:
 		self.mrbCodes = []
 		for i in range(self.iLen):
 			self.mrbCodes.append(getMrbCode(read_uint32(file)))
+		markDeadCode(self.mrbCodes, 0)
 		
 		self.poolLen = read_uint32(file)
 		self.pools = []

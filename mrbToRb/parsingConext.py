@@ -1,8 +1,9 @@
 from __future__ import annotations
+from enum import Enum
 from typing import List, Callable, Any, Dict
 
 
-class ParsingState:
+class ParsingState(Enum):
     NORMAL = 0
     METHOD = 1
     FOR_LOOP = 2
