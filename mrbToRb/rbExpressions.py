@@ -59,12 +59,14 @@ class Expression:
 	"""If true, this expression might be optimized away from the output code."""
 	hasUsages: bool
 	canBeOptimizedAway: bool
+	requiresParentheses: bool
 	register: int
 	associatedSymbol: Expression|None
 
 	def __init__(self, register: int):
 		self.hasUsages = False
 		self.canBeOptimizedAway = True
+		self.requiresParentheses = True
 		self.register = register
 		self.associatedSymbol = None
 
@@ -92,6 +94,10 @@ class LineCommentEx(AnyValueExpression):
 		return f"# {self.value}"
 
 class LiteralEx(AnyValueExpression):
+	def __init__(self, register: int, value: Any, requiresParentheses: bool = True):
+		super().__init__(register, value)
+		self.requiresParentheses = requiresParentheses
+
 	def _toStr(self):
 		strVal = str(self.value)
 		if re.match(r"\d+\.\d+e[+-]\d+", strVal):
@@ -101,19 +107,21 @@ class LiteralEx(AnyValueExpression):
 
 class SelfEx(LiteralEx):
 	def __init__(self, register: int):
-		super().__init__(register, "self")
+		super().__init__(register, "self", False)
 class NilEx(LiteralEx):
 	def __init__(self, register: int):
-		super().__init__(register, "nil")
+		super().__init__(register, "nil", False)
 class TrueEx(LiteralEx):
 	def __init__(self, register: int):
-		super().__init__(register, "true")
+		super().__init__(register, "true", False)
 class FalseEx(LiteralEx):
 	def __init__(self, register: int):
-		super().__init__(register, "false")
+		super().__init__(register, "false", False)
 
 class SymbolEx(AnyValueExpression):
-	...
+	def __init__(self, register: int, value: Any):
+		super().__init__(register, value)
+		self.requiresParentheses = False
 
 class SymbolValEx(LiteralEx):
 	def _toStr(self):
@@ -175,8 +183,8 @@ class BlockEx(Expression):
 	def __init__(self, register: int, expressions: List[Expression]):
 		super().__init__(register)
 		self.expressions = expressions
-		for expression in expressions:
-			expression.hasUsages = True
+		#for expression in expressions:
+		#	expression.hasUsages = True
 
 	def addExpression(self, expression: Expression):
 		self.expressions.append(expression)
@@ -205,7 +213,7 @@ AllUnaryOperators: Set[str] = {
 }
 
 class MethodCallEx(Expression):
-	srcObj: Expression
+	srcObj: Expression|None
 	symbol: SymbolEx
 	args: List[Expression]
 	isOperatorCall: bool
@@ -213,6 +221,7 @@ class MethodCallEx(Expression):
 
 	def __init__(self, register: int, srcObj: Expression|None, symbol: SymbolEx, args: List[Expression]):
 		super().__init__(register)
+		self.requiresParentheses = False
 		self.srcObj = srcObj
 		self.symbol = symbol
 		self.args = args
@@ -225,30 +234,34 @@ class MethodCallEx(Expression):
 			arg.hasUsages = True
 
 	def _toStr(self):
-		if self.isOperatorCall:
+		if self.symbol.value == "[]" and len(self.args) == 1:
+			return f"{self.srcObj}[{self.args[0]}]"
+		elif self.symbol.value == "[]=" and len(self.args) == 2:
+			return f"{self.srcObj}[{self.args[0]}] = {self.args[1]}"
+		elif self.isOperatorCall:
 			if str(self.symbol) in AllOperatorsTwoExp:
-				if isinstance(self.srcObj, SymbolEx) or isinstance(self.srcObj, LiteralEx):
-					left = self.srcObj
-				else:
+				if self.srcObj.requiresParentheses:
 					left = f"({self.srcObj})"
-				if isinstance(self.args[0], SymbolEx) or isinstance(self.args[0], LiteralEx):
-					right = self.args[0]
 				else:
+					left = self.srcObj
+				if self.args[0].requiresParentheses:
 					right = f"({self.args[0]})"
+				else:
+					right = self.args[0]
 				return f"{left} {self.symbol} {right}"
 			else:
-				if isinstance(self.srcObj, SymbolEx) or isinstance(self.srcObj, LiteralEx):
-					right = self.srcObj
-				else:
+				if self.srcObj.requiresParentheses:
 					right = f"({self.srcObj})"
+				else:
+					right = self.srcObj
 				return f"{str(self.symbol).replace('@', '')}{right}"
 		else:
 			result = ""
 			if self.srcObj is not None and not isinstance(self.srcObj, MainClass):
-				if isinstance(self.srcObj, SymbolEx) or isinstance(self.srcObj, LiteralEx):
-					result += f"{self.srcObj}."
-				else:
+				if self.srcObj.requiresParentheses:
 					result += f"({self.srcObj})."
+				else:
+					result += f"{self.srcObj}."
 			result += f"{self.symbol}({', '.join(map(str, self.args))})"
 			return result
 
@@ -271,6 +284,7 @@ class ArrayEx(Expression):
 
 	def __init__(self, register: int, elements: List[Expression]):
 		super().__init__(register)
+		self.requiresParentheses = False
 		self.elements = elements
 		for element in elements:
 			element.hasUsages = True
@@ -303,10 +317,15 @@ class ArrayRefEx(AnyValueExpression):
 	def __init__(self, register: int, array: Expression, index: int):
 		super().__init__(register, array)
 		self.index = index
+		self.requiresParentheses = False
 		array.hasUsages = True
 	
 	def _toStr(self):
-		return f"{self.value}[{self.index}]"
+		if isinstance(self.value, Expression) and self.value.requiresParentheses:
+			value = f"({self.value})"
+		else:
+			value = self.value
+		return f"{value}[{self.index}]"
 
 class ArraySetEx(Expression):
 	arrSymbol: SymbolEx
@@ -325,6 +344,10 @@ class ArraySetEx(Expression):
 		return f"{self.arrSymbol}[{self.index}] = {self.value}"
 
 class StringEx(AnyValueExpression):
+	def __init__(self, register: int, value: Any):
+		super().__init__(register, value)
+		self.requiresParentheses = False
+
 	def _toStr(self):
 		return '"' + str(self.value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
 
@@ -357,6 +380,7 @@ class HashEx(Expression):
 
 	def __init__(self, register: int, hashDict: Dict[Expression, Expression]):
 		super().__init__(register)
+		self.requiresParentheses = False
 		self.hash = hashDict
 		for key, value in hashDict.items():
 			key.hasUsages = True
@@ -548,9 +572,22 @@ class AndEx(TwoCombinedExpEx):
 	def __init__(self, register: int, left: Expression, right: Expression):
 		super().__init__(register, left, right, SymbolEx(0, "&&"))
 
+	def _toStr(self):
+		if self.hasUsages:
+			return super()._toStr()
+		ifExp = IfEx(0, self.left, BlockEx(0, [self.right]))
+		return str(ifExp)
+	
+
 class OrEx(TwoCombinedExpEx):
 	def __init__(self, register: int, left: Expression, right: Expression):
 		super().__init__(register, left, right, SymbolEx(0, "||"))
+	
+	def _toStr(self):
+		if self.hasUsages:
+			return super()._toStr()
+		ifExp = IfEx(0, self.left, BlockEx(0, []), BlockEx(0, [self.right]))
+		return str(ifExp)
 
 class IfEx(StatementEx):
 	condition: Expression
